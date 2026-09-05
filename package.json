@@ -1,0 +1,52 @@
+{
+  "name": "tasksheet-v2",
+  "version": "0.1.0-dev",
+  "private": true,
+  "description": "TaskSheet V2 — local-first Windows desktop assignment sheet generator (ORGANIZE -> GENERATE -> PRINT).",
+  "author": "SoftVibeSolutions",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "dev:renderer": "vite",
+    "build:renderer": "vite build",
+    "build:electron": "tsc --noEmit -p electron/tsconfig.json && node electron/build.mjs",
+    "build": "npm run build:renderer && npm run build:electron",
+    "electron": "electron .",
+    "dev": "npm run build:electron && concurrently -k \"vite\" \"electron .\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p electron/tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:node": "npm rebuild better-sqlite3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "@testing-library/jest-dom": "^6.5.0",
+    "@testing-library/react": "^16.0.1",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.7.4",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "@typescript-eslint/parser": "^8.8.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "concurrently": "^9.0.1",
+    "electron": "^32.1.2",
+    "esbuild": "^0.28.2",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.2"
+  }
+}

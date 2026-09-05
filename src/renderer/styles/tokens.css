@@ -1,0 +1,40 @@
+/*
+  Proposed first-build design tokens per UI-UX-SPEC.md §2/§6/§9.
+  Visual fidelity against an approved reference is not yet verified —
+  no earlier TaskSheet screen/print samples were located in this
+  repository at implementation time (see IMPLEMENTATION-PLAN.md §5).
+*/
+:root {
+  color-scheme: light;
+
+  --nav-width: 232px;
+  --header-height: 56px;
+  --content-padding: 24px;
+  --section-gap: 16px;
+  --row-height: 44px;
+  --touch-target-min: 44px;
+
+  --font-body: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-size-body: 14px;
+  --font-size-title: 22px;
+  --line-height: 1.4;
+
+  --color-bg: #ffffff;
+  --color-panel: #f6f7f8;
+  --color-ink: #1a1d21;
+  --color-ink-muted: #5b6470;
+  --color-border: #d7dce1;
+  --color-accent: #1f5fa8;
+  --color-accent-ink: #ffffff;
+  --color-warning-bg: #fff6e0;
+  --color-warning-border: #c9922a;
+  --color-danger: #b3261e;
+  --color-danger-bg: #fdecea;
+  --color-focus-ring: #1f5fa8;
+  --color-demo-banner-bg: #fff3cd;
+  --color-demo-banner-border: #b58a1f;
+
+  --radius: 6px;
+  --dialog-width-compact: 480px;
+  --dialog-width-stepped: 720px;
+}
