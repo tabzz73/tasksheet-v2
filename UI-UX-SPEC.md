@@ -1,6 +1,6 @@
 # TaskSheet V2 — UI/UX and print implementation specification
 
-Status: implementation baseline 2, 2026-09-05. Delegated by PRD.md; subordinate to the controlling suite. Functional behaviors are requirements. Measurements below are proposed first-build defaults pending visual and physical review, not falsely labeled approved samples.
+Status: implementation baseline 4, 2026-09-05. Delegated by PRD.md; subordinate to the controlling suite. ACCESS-CONTROL.md defines account/CRUD capabilities. Functional behaviors are requirements. Measurements below are proposed first-build defaults pending visual and physical review, not falsely labeled approved samples.
 
 ## 1. Reference register
 
@@ -138,3 +138,17 @@ Settings → Data Management provides a scope selector: Whole Database / Wound C
 Export shows scope and record totals with All records as the complete-scope default; any catalog filtered subset must be explicitly selected/labeled and include required catalog dependencies. Whole Database cannot silently inherit page filters. Catalog exports show that resident data is excluded. Whole exports show sensitive-data handling and source facility context.
 
 Use a dedicated stepped import page: Scope → File/Format → Mapping & Validation → Changes Preview → Confirm. Validation results/conflict rows are paged with filters and direct correction links. Blocking summaries, import failure and final replacement warnings use separate centered attention dialogs, not alerts buried in the wizard form. Whole replacement confirms the facility change and verified backup; catalog replacement states the exact affected scope and deactivations. Retain draft choices when returning to a step; invalidate stale previews before commit. Show counts and a safe result summary only after successful completion.
+
+Permission gates apply to both shortcuts and wizard routes. Whole Database logical exchange clearly states that local accounts/security history are excluded. Native backup is labeled sensitive and authentication-bearing. Normal restore confirms that current access policy is retained; fresh-machine recovery requests a backup Administrator credential before data preview/activation. Viewer sees no import/export action; Editors see only explicitly granted scopes.
+
+## 11. Sign-in, user administration and permission-aware CRUD
+
+Clean first run begins with Create Administrator, then recovery-code custody, then facility setup. No resident data is rendered before sign-in. Login is a compact view with alias/password, password visibility toggle, generic failure, cooldown and recovery entry. No employee profile or staff role collection. Use password-manager/paste support, keyboard focus and accessible labels. No default/demo account credentials.
+
+The header shows current login alias/access role plus Lock, Change password and Logout; identity stays out of care printouts. Settings adds an Administrator-only Users & Access category: paged account list with alias, access role and enabled state; Add User, Edit Role/Grants, Reset Password, Disable/Enable. No verifier/hash fields in any list/form. Use compact account forms and a grouped searchable grant checklist for Editor-only grantable capabilities; show exact effects and deny privilege escalation.
+
+Read-only viewers receive a clear View and print access label. Show permitted controls only; deep-link/direct-command denial still returns a centered Access denied dialog. Editors see Add/Edit but cannot archive/delete via generic status controls unless granted. Buttons name the operation accurately: Archive resident, Deactivate task, Heal wound, Delete unused entry. Preview dependency effects in a dedicated review panel, then center the consequential confirmation; Administrator rights never bypass reference constraints.
+
+Lock immediately obscures all clinical content and suspends actions, even with dirty forms. Only successful reauthentication by the same account can recover its in-memory draft. Logout/account switch uses the dirty-exit guard then clears caches/drafts; another user gets no previous-user data. Disabled/revoked sessions cannot submit old drafts. Show Session locked/Access changed without leaking protected content. Own-password change is distinct from Administrator reset; reset users must change their password before normal data access. Last-admin operations show a centered blocking explanation.
+
+Security audit is Administrator-only with paged event summaries and no clinical payload/passwords. Role and security action confirmations require fresh Administrator reauthentication per ACCESS-CONTROL.md. Centered secure dialogs have one focus trap and never nest an editable password form inside another active modal.

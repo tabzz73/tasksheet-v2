@@ -24,7 +24,8 @@ Read these files completely before editing application code:
 8. `IMPLEMENTATION-PLAN.md`
 9. `AGENTS.md` and applicable nested instructions
 10. `CLAUDE.md` when using Claude Code, or the applicable tool-specific instructions
-11. `TASKSHEET_V2_CONFLICT_ANALYSIS.md` for decision history, accounting for its superseding implementation addendum
+11. `ACCESS-CONTROL.md` and `docs/adr/ADR-0002-local-accounts-and-authorization.md`
+12. `TASKSHEET_V2_CONFLICT_ANALYSIS.md` for decision history, accounting for its superseding implementation addendum
 
 Reading order does not change authority. Follow PRD → Architecture Essentials → Architecture → approved ADRs → AGENTS → tool-specific instructions → tests/implementation. Companion specifications have only the authority delegated by their controlling documents. This kickoff prompt does not override the suite.
 
@@ -45,18 +46,18 @@ TaskSheet by SoftVibeSolutions is an offline-capable, single-facility, single-wo
 - Use main-process-owned SQLite under the application-data directory and narrow typed, validated preload IPC.
 - Never make renderer localStorage the production database, expose generic file/SQL access, or migrate real data without a validated recovery path.
 - Keep domain rules pure and shared. UI components must not reinvent recurrence, overnight windows, occupancy, provenance or follow-up logic.
-- Do not store staff/employee identities. Use role and assignment-line codes. Redact usernames and paths in exported diagnostics.
+- Implement minimal local accounts under ACCESS-CONTROL.md: Administrator, Editor and Viewer, independently of care roles. Do not create employee profiles. Enforce every CRUD/print/transfer permission in main-process services. Redact identity and paths in exported diagnostics; logical exports exclude security tables.
 - Ordinary assignment sheets have no in-app Done/Complete actions or completion percentages. Follow-up is a separate occurrence-based operational continuity workflow, not proof of care.
 - Keep manual, demo and imported provenance distinguishable. Load fictional demo data only deliberately and show the persistent Demo Mode indicator.
 - No cloud synchronization, telemetry or external data transmission is introduced by this task.
 
 ### 4. Build the first complete workflow
 
-Deliver: facility setup → one configurable shift → one resident and bed placement → one care task → SQLite save → immutable preview → user-initiated print.
+Deliver: first Administrator enrollment → local login → facility setup → one configurable shift → one resident and bed placement → one care task → SQLite save → immutable preview → user-initiated print.
 
 Implement enough role configuration and fixtures to demonstrate both HCA and LPN output profiles. Include facility contact settings, timezone, shift name/short code/role/start/end, resident smart search and placement, a catalog-backed task snapshot, explicit timing and assignment mapping, and correct eligibility for the selected date/shift.
 
-Use real persistence and application services, not arrays or mock handlers that disappear on restart. Validate occupancy and shift/time boundaries. The same typed immutable document model must power preview and printing. Restore saved state after restarting offline. Make invalid input, no configured shift, no residents and no due tasks explicit and distinguishable.
+Include Editor and Viewer test accounts using fictional aliases, sign-in/lock/logout, password hashing, last-admin protection and direct-IPC authorization checks. Read the amended native/logical restore security policies. No default credentials. Use real persistence and application services, not arrays or mock handlers that disappear on restart. Validate occupancy and shift/time boundaries. The same typed immutable document model must power preview and printing. Restore saved state after restarting offline. Make invalid input, no configured shift, no residents and no due tasks explicit and distinguishable.
 
 Use fictional test data. Keep the first workflow focused; do not build every module at once. If some phase-1 behavior already works, verify it and implement the missing portions rather than duplicating it.
 
@@ -97,7 +98,7 @@ Do not claim these later features implemented simply because types, menu labels 
 
 ### 8. Verify and hand off
 
-Use repository-defined gates and meaningful tests. Cover phase-1 acceptance scenarios AC-01–05, AC-26–30 and AC-34–35, plus relevant time/occupancy boundaries. Run applicable type/lint/unit/application/adapter/component tests, build and E2E checks. Verify restart persistence with renderer storage non-authoritative. Exercise centered warnings, draft protection, keyboard navigation and print content parity.
+Use repository-defined gates and meaningful tests. Cover phase-1 acceptance scenarios AC-01–05, AC-26–30 and AC-34–35, plus relevant time/occupancy boundaries and new access scenarios AC-44–53. Run applicable type/lint/unit/application/adapter/component tests, build and E2E checks. Verify restart persistence with renderer storage non-authoritative. Exercise centered warnings, draft protection, keyboard navigation and print content parity.
 
 Inspect screen and rendered print samples, including long text and multiple pages. If Windows packaging, a real printer or another required capability is unavailable, complete the software work that can be verified and record the exact pending hardware checks. Do not call the build production-ready.
 

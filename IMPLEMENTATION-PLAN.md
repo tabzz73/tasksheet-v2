@@ -1,6 +1,6 @@
 # TaskSheet V2 — Agent implementation and acceptance plan
 
-Status: implementation baseline 2, 2026-09-05. This plan sequences the approved product; it does not authorize new scope or certify existing code. No application implementation was performed in this documentation revision.
+Status: implementation baseline 4, 2026-09-05. Includes user-approved local accounts and CRUD permissions under ACCESS-CONTROL.md/ADR-0002. No application implementation was performed in this documentation revision.
 
 ## 1. Agent starting instructions
 
@@ -13,7 +13,7 @@ Build one complete end-to-end workflow at a time. Match inspected approved UI/pr
 | Phase | Deliverable | Exit evidence |
 | --- | --- | --- |
 | 0 — Establish reality | Inventory source, package scripts/versions, existing storage keys/schema, active release status, available references; choose/pin SQLite binding compatible with actual Electron | Gap/decision register; packaged SQLite open/transaction/backup smoke result; no invented dependency versions |
-| 1 — First complete workflow | Facility → one shift → one resident/bed → one task → saved SQLite state → immutable preview → print; implement both HCA and LPN profiles | AC-01–05, offline restart, labeled UI/print samples; actual physical print performed or explicitly pending |
+| 1 — First complete workflow | First Administrator enrollment/login → facility → shift → resident/bed → task → SQLite → preview/print; HCA/LPN profiles, Editor/Viewer and enforced access checks | AC-01–05 plus AC-44–49 and AC-52–53; offline restart; physical print performed or explicitly pending |
 | 2 — Domain breadth | Multiple rooms/beds, short/overnight shifts, recurrence, modifiers, unit tasks, date/status eligibility | AC-06–10 and migration fixtures |
 | 3 — Operational visibility | FYIs, attention, dashboard customization, huddle, Code of Month, occurrence-based follow-up | AC-11–14; no ordinary care completion controls |
 | 4 — Wounds and bathing | Single wound registry, lifecycle propagation, per-resident bathing proposal/confirmation | AC-15–17 |
@@ -82,6 +82,10 @@ Before a release claim, run repository-defined type/lint/build gates and relevan
 
 These are bounded implementation/verification tasks, not permission to invent product scope or postpone all useful work.
 
+## 5.1 Access-control gates
+
+Read ACCESS-CONTROL.md and ADR-0002 with the initial suite. Phase 0 inventories any existing authentication safely; phase 1 implements accounts, first-admin bootstrap, secure password storage, sessions, main-process CRUD enforcement and permission-aware UI. Phase 6 adds full native/logical restore identity-policy tests AC-50–51. Do not defer authentication until release packaging.
+
 ## 6. Scoped data exchange delivery
 
 Read DATA-EXCHANGE.md before persistence/exchange work. Implement catalog types and scope isolation with their owning modules; phase 6 must complete all nine scope/format import/export pairs and the Data Management wizard. Supply canonical templates, third-party catalog mapping, conflict preview, verified pre-replacement backup and round-trip evidence. Native backup alone does not satisfy CSV/Excel/JSON whole-database exchange.
@@ -95,3 +99,13 @@ Read DATA-EXCHANGE.md before persistence/exchange work. Implement catalog types 
 | AC-41 | Missing table/link, duplicate ID, prohibited scope data or future schema | Paged correction report and centered blocking summary; active database unchanged |
 | AC-42 | Whole import replaces facility data; interrupt activation or cancel before commit | Explicit confirmation and verified backup required; safe old/new recovery; no cross-facility merge or partial import |
 | AC-43 | Large/malformed archive/workbook, stale preview or disk-full export | Bounded parsing, safe rejection, preserved selections/data; no false success or broken artifact presented as complete |
+| AC-44 | Clean/legacy first run; restart offline after admin enrollment | No default credentials; recognized bootstrap only; auth persists and restart requires login; no protected data before sign-in |
+| AC-45 | Administrator, Editor and Viewer attempt every matrix action through UI and direct IPC | Role/capability defaults enforced in main process; Viewer cannot mutate; hidden controls are not the sole protection |
+| AC-46 | Editor lacks archive/delete grant but changes status/imports/calls a lifecycle command | Forbidden operation rejected with unchanged data; legitimate updates still work; granting exact capability enables only that operation |
+| AC-47 | Disable/demote last admin, including concurrent commands | Last enabled Administrator retained transactionally; no self-escalation through forged actor/role payloads |
+| AC-48 | Failed logins, password reset/change, recovery code and repeat recovery attempt | Salted Argon2id, persistent delays, forced change/revocation and single-use recovery work; no secret leakage or backdoor |
+| AC-49 | Dirty editor hits idle/OS lock, then another account signs in; permissions revoked mid-preview | Data obscured; same-user-only draft recovery; no cross-user cache; stale session/preview denied |
+| AC-50 | Export/import every logical format and both catalogs after accounts exist | No accounts/grants/secrets/security audit transferred; source actor IDs sanitized; business round trip retained; files cannot create an admin |
+| AC-51 | Native backup normal restore then fresh-machine disaster recovery | Admin-only backup; normal restore retains current policy; fresh recovery authenticates against backup before activation; no silent password/grant rollback |
+| AC-52 | Protected CRUD or bulk mutation succeeds/fails; attempt to edit audit | Trusted actor and action recorded transactionally without clinical payloads; no audit editing or cleanup bypass |
+| AC-53 | Viewer prints/saves PDF, tries CSV export or shared preset save; Editor gains then loses scope grant | Print remains allowed; file transfer/shared mutation denied; grants enforced per action and revocation invalidates replay/results |

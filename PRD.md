@@ -3,7 +3,7 @@
 **Document status:** Authoritative product baseline  
 **Owner:** SoftVibeSolutions  
 **Version:** 2.0-draft  
-**Specification revision:** Implementation baseline 3 — scoped CSV, Excel and JSON exchange  
+**Specification revision:** Implementation baseline 4 — local accounts, CRUD and permissions  
 **Last updated:** 2026-09-05  
 
 ## 1. Document authority
@@ -86,6 +86,14 @@ Printed resident identity is limited by default to:
 
 Staff names and employee identities are not stored for assignment-line configuration or output. Assignment lines are represented by configurable short codes such as `D1`, `E4`, `N1`, `D1LPN`, or `NLPN`.
 
+### 6.3 Local accounts and CRUD permissions
+
+Require offline local login with Administrator, Editor and Viewer access roles, independent of HCA/LPN/RN care-output roles. Administrator manages accounts, configuration, deletion and full transfers/recovery. Editor creates/edits operational records; delete/deactivate and scoped catalog/report transfers require explicit grants. Viewer can view/preview/print authorized data but cannot mutate business records. All roles may change their own password and lock/logout.
+
+`ACCESS-CONTROL.md` defines the delegated normative CRUD matrix, grants, account lifecycle, security audit and authentication rules. `docs/adr/ADR-0002-local-accounts-and-authorization.md` records this user-approved change. Minimal account IDs, chosen login names, password verifiers and permissions are allowed solely for access control; employee profiles, payroll, scheduling and performance remain excluded.
+
+First run creates an Administrator before facility setup, without default credentials. Protect the last enabled Administrator and provide controlled recovery. Enforce all permissions in main-process services, including direct IPC, imports, exports and lifecycle actions. Hiding controls is insufficient. Editing does not imply deletion, export, restore or account-management rights; dependency/history constraints apply even to Administrator.
+
 ## 7. Product principles
 
 1. **Print is a primary interface.** Screen workflows must produce dependable paper outputs.
@@ -128,7 +136,7 @@ Developer Information shall show:
 
 ## 9. First-run setup
 
-On a clean installation, TaskSheet shall guide an authorized user through:
+On a clean installation, enroll the first local Administrator and recovery material, then guide the authenticated Administrator through:
 
 1. Facility identity: name, address, main phone, nursing/unit phone, fax, and optional contact details.
 2. Locale: timezone, 12/24-hour display preference, week-start day, and overnight reporting basis.
@@ -179,7 +187,7 @@ Rules:
 - Room sorting shall be natural and predictable.
 - Resident selectors must use smart search, must not auto-select the first resident, and must clearly show an empty selection.
 - Historical residents must not appear on current assignment sheets unless explicitly included by a specialized report.
-- TaskSheet shall not persist staff or employee personal data. Assignment configuration and output identify role, shift, assignment-line code, and area—not individual employees.
+- TaskSheet excludes employee profile data; minimal local account data is permitted only under section 6.3. Assignment configuration and output identify role, shift, assignment-line code and area, not employee identities.
 
 ## 12. Work information model
 
@@ -407,7 +415,7 @@ Production V2 uses SQLite under `app.getPath("userData")`, as specified by `docs
 
 ### 20.1 Separate import/export scopes
 
-Provide independent Import and Export actions for Whole Database, Wound Care Supplies Catalog, and Care Tasks Catalog. Each supports CSV, Excel `.xlsx`, and JSON in both directions. Whole Database means all supported logical application records and relationships, including inactive/history records, facility settings, both catalogs, schedules, follow-up occurrences, provenance and saved presets. It is not merely the currently visible or filtered records. Exclude OS paths, secrets, employee data, caches and database-engine internals. The native `.tasksheet-backup` format remains an additional exact database recovery option.
+Provide independent permission-controlled Import and Export actions for Whole Database, Wound Care Supplies Catalog, and Care Tasks Catalog in CSV, Excel `.xlsx` and JSON. Whole Database logical exchange includes all supported business records/history and relationships, settings, catalogs, schedules, follow-ups, provenance and presets, regardless of screen filters. Exclude accounts, grants, authentication secrets, security audit, OS paths, employee profiles, caches and engine internals; display these exclusions. Native `.tasksheet-backup` includes security tables and is a sensitive Administrator-only artifact. Normal restore preserves current accounts/policy; fresh-machine recovery verifies a backup administrator before activation under ACCESS-CONTROL.md.
 
 Whole-database CSV uses one downloadable ZIP containing related CSV tables and a manifest; Excel uses one workbook with related worksheets; JSON uses one structured document. Do not flatten an entire relational database into a lossy single table. Catalog CSV uses one standalone file per selected catalog, Excel one workbook and JSON one document. Supply editable templates and documented field mappings. Preserve leading zeros, military times, multiline instructions, stable IDs, references and active/inactive values across formats.
 
@@ -454,10 +462,10 @@ Default paper output uses white backgrounds, black text, lightweight rules and o
 - Local data, backups, and prints must be treated as sensitive facility information.
 - Destructive actions require explicit confirmation and, when material, a recoverable backup.
 - Logs must not expose resident details unnecessarily.
-- The production schema, exports, diagnostics, printouts, demos, and fixtures shall not persist staff names, initials, employee numbers, usernames, personal contacts, schedules, attendance, payroll, performance, credentials, or staff completion statistics. OS account names shall not be copied into TaskSheet data or ordinary diagnostics.
+- Employee names, initials, employee numbers, contacts, schedules, attendance, payroll, performance and staff completion records remain prohibited. Section 6.3 allows minimal local login names, password verifiers, permissions and security audit only. Fictional account aliases may be used for auth tests; no real credentials in fixtures. OS account names remain excluded. Logical exports and care printouts omit the security domain; native backups follow ACCESS-CONTROL.md.
 - Generated sheets require appropriate physical handling and secure disposal under facility policy.
 
-Resolved application-data paths may contain Windows usernames. App Information may display the actual runtime path locally on explicit user request; this transient diagnostic is not an employee record. Logs, copied support summaries, exports, and diagnostics bundles must use `<USER_DATA>` and other redacted path tokens. The local display exception does not authorize persisting usernames.
+Resolved application-data paths may contain Windows usernames. App Information may display the actual runtime path locally on explicit user request; this transient diagnostic is not an employee record. Logs, copied support summaries, exports, and diagnostics bundles must use `<USER_DATA>` and other redacted path tokens. This exception does not authorize persisting OS usernames; chosen application login aliases are governed separately by section 6.3.
 
 ### 22.1 Linked wound lifecycle
 

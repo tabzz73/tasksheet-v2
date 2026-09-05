@@ -89,7 +89,9 @@ Never resolve a material conflict silently. Preserve the higher-authority rule a
 ### 3.5 Privacy and integrations
 
 - No analytics, telemetry, cloud sync, remote backup, or third-party data transmission without an approved PRD change and ADR.
-- TaskSheet persists no staff/employee personal data. Role, shift, assignment-line code, and area are permitted; employee identities, OS usernames, contacts, schedules, attendance, payroll, performance, credentials, and staff completion data are not.
+- Permit only the minimal local account identity/security data defined by ACCESS-CONTROL.md and ADR-0002. Employee profiles, OS usernames, contacts, schedules, payroll, performance and staff completion data remain prohibited. Care outputs use role and assignment-line codes.
+- Require Administrator/Editor/Viewer offline login and default-deny main-process authorization on every query/mutation/print/transfer. Deletion is distinct from editing; defend last-admin, stale-session and direct-IPC cases.
+- Logical CSV/Excel/JSON exports exclude accounts/grants/secrets/security audit. Native SQLite backups include security tables and require Administrator handling; normal restore preserves current policy.
 - Logs avoid unnecessary resident identifiers and never include full exported datasets.
 - Secrets are never committed or stored in ordinary application state.
 - Printers, exported files, and backups are treated as sensitive-data boundaries.
@@ -185,7 +187,7 @@ Every domain change needs tests at the lowest effective level. Required boundary
 - Demo/import/manual cleanup isolation
 - Follow-up carry-forward and escalation
 - Print inclusion parity between preview and output
-- Absence of staff personal data from persistence, exports, diagnostics, fixtures, and printouts
+- Absence of prohibited employee profile data; isolation of the narrow account-security exception from care outputs and logical exports; role/CRUD/restore authorization tests
 - Keyboard navigation and no nested-interactive regression
 - Backup/migration rollback or safe failure
 

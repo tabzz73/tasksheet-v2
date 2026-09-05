@@ -51,7 +51,7 @@ Do not add ordinary in-app care completion controls or completion percentages. F
 - Standing FYIs never change task due/overdue counts.
 - Carry-forward never resets the original due date.
 - Interactive rows do not contain nested interactive elements.
-- TaskSheet persists no staff/employee personal data; use role, shift, assignment-line code, and area only.
+- TaskSheet permits minimal local account identity/security data under ACCESS-CONTROL.md and ADR-0002; employee profiles remain prohibited. Care output uses role/shift/line/area.
 
 ## 4. Working method
 
@@ -116,7 +116,8 @@ Approved notice:
 ## 8. Data and privacy
 
 - Use fictional data in tests, screenshots, and demos.
-- Do not put staff names, initials, employee numbers, usernames, contacts, schedules, attendance, payroll, credentials, performance, or completion data in schemas, fixtures, screenshots, exports, printouts, logs, or diagnostics.
+- Exclude employee profile/contact/payroll/scheduling/performance data. Local application aliases, password verifiers, grants and actor account IDs are permitted only under ACCESS-CONTROL.md. Never expose verifiers/secrets in UI DTOs, diagnostics, screenshots or logical exports.
+- Read ACCESS-CONTROL.md and ADR-0002 before coding. Implement offline login and main-process role/CRUD enforcement in phase 1; do not defer security to hidden buttons or later packaging.
 - Do not copy OS usernames into TaskSheet state or ordinary support output.
 - Explicit local diagnostics may transiently show a resolved path; copied/exported diagnostics always redact usernames and path roots.
 - Do not add telemetry, analytics, cloud calls, or external data transfer without approved product and architecture changes.

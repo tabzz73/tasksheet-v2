@@ -8,6 +8,7 @@ Use opaque stable IDs; never derive identity from resident names, room labels or
 
 | Entity | Minimum fields and constraints |
 | --- | --- |
+| LocalAccount / Grant / SecurityEvent | Minimal alias/id/verifier/role/grants/state/authRevision and identity-limited audit under ACCESS-CONTROL.md; no employee profile |
 | FacilitySettings | singleton facilityId; print contact fields; timezone; weekStart; reportingBasis; codeOfTheMonth; escalation threshold default 3 |
 | Room / Bed | stable IDs; room label and sort key; bed label unique within room; active state |
 | Resident / Placement | names, status and effective dates; residentId/bedId/start/end placement; unique current placement per resident and bed |
@@ -80,7 +81,7 @@ A schedule edit creates a new revision from an explicit effective date. Material
 
 ## 4. Wound links
 
-Links require matching resident IDs and existing wound/task IDs. On heal/inactivate, atomically mark the wound status, suppress linked occurrences from that timestamp, close all still-open linked follow-ups as `no_longer_needed`/`wound_inactive`, and record an operational event without employee identity. Historical terminal records and unlinked generic reminders are unchanged. A stale preview requires regeneration. Reactivating a wound does not revive tasks or follow-ups; explicit reviewed schedule reactivation creates future eligible work.
+Links require matching resident IDs and existing wound/task IDs. On heal/inactivate, atomically mark the wound status, suppress linked occurrences from that timestamp, close all still-open linked follow-ups as `no_longer_needed`/`wound_inactive`, and record an operational event with trusted actor account ID, without employee profile data. Historical terminal records and unlinked generic reminders are unchanged. A stale preview requires regeneration. Reactivating a wound does not revive tasks or follow-ups; explicit reviewed schedule reactivation creates future eligible work.
 
 ## 5. Bathing request and output
 
@@ -102,8 +103,8 @@ Stable allocation baseline: preserve valid locks, then natural room/bed order pl
 
 All print models include document kind, model version, facility header snapshot, requested context, source dataset revision, explicit generatedAt, warnings, stable ordered rows, and approved notice when applicable. A supplied timestamp ensures deterministic output; builders never call the live clock. Show “Data changed—regenerate” if underlying revision changes before printing; retain the old preview as a labeled snapshot, never silently mix versions.
 
-IPC mutations carry commandId and expected revision; validate both sides and enforce business rules in main-process application services. Return typed `validation`, `conflict`, `storage`, or `success` results. An allow-listed query returns only its view model, not the full database. Save sensitive values only in domain records required by the PRD; events record entity IDs, action/reason and time without employee identities.
+IPC mutations carry commandId and expected revision; validate both sides and enforce business rules in main-process application services. Authenticate and authorize the trusted session first. Return typed `unauthenticated`, `forbidden`, `validation`, `conflict`, `storage`, or `success` results. An allow-listed query returns only its view model, not the full database. Save sensitive values only in domain records required by the PRD; events record entity IDs, action/reason, time and trusted actor account ID under ACCESS-CONTROL.md, without employee profiles. Retry keys are scoped to account/installation; authorization precedes cached-result delivery.
 
 ## 7. Data exchange
 
-Use the canonical scope/format/field and relationship rules in `DATA-EXCHANGE.md` for all nine import/export combinations. Wound supply imports operate solely on reusable product records; care-task imports operate on reusable task/modifier definitions. Whole-database logical exchange includes all supported application tables, including these catalogs, regardless of screen filters. Imported dependencies must resolve before commit and snapshots must remain stable.
+Use the canonical scope/format/field and relationship rules in `DATA-EXCHANGE.md` for all nine import/export combinations. Wound supply imports operate solely on reusable product records; care-task imports operate on reusable task/modifier definitions. Whole-database logical exchange includes supported business tables and catalogs regardless of screen filters, but excludes local account/security tables under ACCESS-CONTROL.md. Imported dependencies must resolve before commit and snapshots must remain stable.

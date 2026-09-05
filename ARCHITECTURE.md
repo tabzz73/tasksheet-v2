@@ -244,7 +244,7 @@ FYIs, attention items, selected resident tasks, and future approved announcement
 
 ### 6.8 Follow-up
 
-Follow-up transitions use the occurrence-level command in `DATA-CONTRACTS.md`, including command ID and expected revision. The transaction validates current state, preserves due date, increments carry-forward once per distinct command, and records an identity-free operational event. It never changes a recurring template’s completion state or asserts clinical completion.
+Follow-up transitions use the occurrence-level command in `DATA-CONTRACTS.md`, including command ID and expected revision. The transaction authorizes the session, validates current state, preserves due date, increments carry-forward once per distinct command, and records an operational event with trusted actor account ID under ACCESS-CONTROL.md. It never changes a recurring template’s completion state or asserts clinical completion.
 
 ## 7. Time and date handling
 
@@ -456,8 +456,16 @@ Diagnostics may include app version, schema version, platform, Electron/Chromium
 - Never embed secrets in renderer bundles.
 - Redact sensitive values from logs and crash reports.
 - Require explicit confirmation for clear/reset/restore operations.
-- Do not define or persist a Staff/Employee entity in V2. Do not store names, initials, employee numbers, usernames, contacts, staff schedules, attendance, payroll, credentials, performance, completion statistics, or persistent prepared/assigned/completed-by identities.
-- Do not copy the operating-system account name into application data, exports, printouts, or ordinary diagnostics. Use role, shift, assignment-line code, and area only.
+- Do not define a Staff/Employee profile domain. Permit only the local account/auth/grant/security-audit model in ACCESS-CONTROL.md under ADR-0002. Do not attach staff identities to care sheets or collect payroll, employee credentials, schedules or performance records.
+- Do not copy the OS account name into data, exports, printouts or diagnostics. Chosen application login aliases are distinct and limited to authentication/administration; care output uses role/shift/line/area.
+
+### 14.1 Local authentication and authorization
+
+ACCESS-CONTROL.md defines the delegated command/resource capability matrix and credential/session contracts. Store security tables in the same main-owned SQLite database, with a protected repository and restricted DTOs. Authenticate and authorize every IPC sender before repository access; validate active account/auth revision again at the mutation/export boundary. Never trust role/actor IDs supplied by renderer payloads. Security-sensitive settings require fresh Administrator reauthentication. Hashing runs through a vetted bounded adapter; sessions remain in main-process memory.
+
+Include actor account ID in transactional operational audit while excluding employee profile data. Account changes/security events are append-only. Locked/disabled sessions cannot access cached view models or another user's drafts. Treat unauthenticated/forbidden as first-class typed results rendered in the centered attention flow. Lifecycle transitions, imports and retry handling cannot bypass the matrix.
+
+Native backups snapshot accounts as well as business tables; logical exchange excludes security tables and maps actor references to historical source markers. Normal restore rebuilds a candidate with incoming business data plus current security state; fresh-machine disaster recovery authenticates against candidate security first. See ADR-0002 for migration and the change to prior backup identity assumptions.
 
 ## 15. Testing strategy
 

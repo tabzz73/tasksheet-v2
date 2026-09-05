@@ -1,6 +1,6 @@
 # TaskSheet V2 — Import and export specification
 
-Status: implementation baseline 3, 2026-09-05. Delegated by ARCHITECTURE.md and subordinate to the controlling suite. This specifies required behavior; no application import/export feature is claimed implemented by this document.
+Status: implementation baseline 4, 2026-09-05. Delegated by ARCHITECTURE.md and subordinate to the controlling suite. ACCESS-CONTROL.md governs authorization and security-domain exclusions. This specifies required behavior; no application import/export feature is claimed implemented by this document.
 
 ## 1. Scope and format matrix
 
@@ -18,7 +18,7 @@ Excel means `.xlsx` in this baseline, not `.xls`, `.xlsm`, macros or cloud sprea
 
 Include every logical application table through an explicit versioned export registry: facility settings and Code of Month, areas/rooms/beds/placement history, residents and status history, shifts and mappings, task catalogs and versions/modifiers, wound supplies, resident/unit tasks and schedule revisions, FYIs/attention/visibility, wound registry/history/supply links and snapshots, bathing requirements/assignments, follow-up occurrences/events, import provenance, print presets and binder-generation metadata where persisted. Empty registered tables are represented explicitly.
 
-Preserve stable IDs, relationships, timestamps, effective dates, snapshots, active/inactive state and manual/demo/imported provenance. Include inactive and terminal history. Exclude credentials, employee identities, OS paths, runtime caches, locks, migration implementation internals and binary page layout. This is a lossless logical round trip for supported application data, not a byte-identical SQLite copy. Native backup remains available for exact database recovery.
+Preserve business IDs, relationships, timestamps, effective dates, snapshots, active/inactive state and manual/demo/imported provenance, including inactive/terminal history. Exclude accounts, login names, grants, password/recovery verifiers, sessions, security audit, employee profiles, OS paths, runtime caches and engine internals. Replace actor account IDs on operational events with a non-identifying source marker; the imported marker cannot become a local principal. This round trip preserves business facts but intentionally excludes security identities. Native backups contain security tables and follow ACCESS-CONTROL.md's Administrator-only creation and controlled restore/recovery policy.
 
 Export reads a consistent snapshot and reports its revision. New domain tables cannot ship until registered and covered by round-trip tests. External binary attachments are not implied by current V2 scope; introducing one requires extending this contract, not silently dropping it.
 
@@ -43,6 +43,10 @@ Care task row: id, taskCode, name, category, eligible role, default duration, re
 Task-code and modifier-code uniqueness are enforced separately. Catalog files contain no resident IDs, dates of care, wound assessments or resident-task assignments. Exported catalog dependencies are bundled for the selected scope; unresolved links block import. Existing assignment and wound supply snapshots remain unchanged when the current catalog is updated.
 
 ## 5. Import workflow and conflict handling
+
+Authorize every preview, file read, export and commit using ACCESS-CONTROL.md. Whole-business-database export/import and native backup/restore are Administrator-only. Editor catalog/report transfers require explicit scope/action grants; catalog import also needs matching create/update rights and replacement requires deactivation rights. Viewer cannot import/export data files. Do not infer export rights from print rights. Preview tokens include the account/auth revision; revoke them if rights change. Never read unauthorized data into a preview and hide it afterward.
+
+Whole-business-data import preserves receiving accounts/grants/recovery material/security audit. Reject account/security tables in logical imports rather than mapping them to users. A source file cannot create an administrator. Display “All business data; local accounts and security history excluded” next to Whole Database logical exchange. This narrows the earlier full-application-table wording without removing business data coverage.
 
 Use Scope → File/Format → Mapping & Validation → Changes Preview → Confirm. TaskSheet-generated files auto-map by version. Third-party flat catalog files can map headers to required fields with explicit role/category/value mappings. Arbitrary external whole databases are not auto-guessed: they require the canonical schema or an explicit supported migration adapter.
 

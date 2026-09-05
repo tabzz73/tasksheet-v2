@@ -6,6 +6,8 @@
 **Date:** 2026-09-05  
 **Specification incorporation date:** 2026-09-05  
 
+**Access-control supersession:** The user subsequently requested local Administrator/Editor/Viewer accounts and CRUD permissions. ACCESS-CONTROL.md and ADR-0002 supersede the historical blanket username/identity prohibition below only for minimal local account security and audit data. Employee profiles remain prohibited. Logical exports exclude security data; native snapshots include it under controlled Administrator-only recovery. This report retains the earlier finding as decision history, not as a conflicting current instruction.
+
 **Implementation addendum:** The later implementation-baseline revision adds `UI-UX-SPEC.md`, `DATA-CONTRACTS.md`, `IMPLEMENTATION-PLAN.md` and `docs/adr/ADR-0001-production-persistence-boundary.md`. SQLite is now selected. The historical uniform bathing-count sketch below is superseded by per-resident requirements; follow-up is occurrence-scoped; wound healing has exact suppression/closure behavior; local path inspection is transient and exported paths are redacted. Historical findings below describe the audited baseline, not newly unresolved conflicts.
 
 ## 1. Executive decision

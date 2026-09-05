@@ -42,7 +42,7 @@ Before implementing, ask whether the change introduces any of these:
 - Multi-facility tenancy
 - New external data transmission
 - Expanded resident identity on prints
-- Staff/employee personal data or identity fields
+- Employee profile data or account/security fields beyond the explicit ACCESS-CONTROL.md exception
 - A change to overnight, due-date, backup, or provenance semantics
 
 If yes, the change requires an approved PRD update and usually an ADR. Do not smuggle a scope change in as a UI enhancement or refactor.
@@ -146,7 +146,8 @@ Use the smallest set that credibly covers the change, expanding for release work
 
 - Use clearly fictional facilities and residents.
 - Never copy production resident data into fixtures, snapshots, screenshots, logs, or issues.
-- Never create staff personas or persist staff names, initials, employee numbers, usernames, contacts, schedules, attendance, payroll, credentials, performance, completion statistics, or OS account names. Use role and assignment-line codes.
+- No employee profiles, real credentials or OS account names in fixtures. Fictional local login aliases/verifier fixtures are permitted solely for auth tests under ACCESS-CONTROL.md. Care output uses role and assignment-line codes.
+- Read ACCESS-CONTROL.md and ADR-0002; enforce CRUD/role permissions in main-process services, not just UI. Test direct IPC, lifecycle bypasses, session revocation, last-admin protection and security exclusions during transfer. Auth is phase-1 work.
 - Include realistic edge cases: custom room labels, double occupancy, short shifts, overnight shifts, inactive tasks, healed wounds, long instructions, and no-results states.
 - Make time-dependent tests use an injected/fixed clock and explicit facility timezone.
 
