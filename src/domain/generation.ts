@@ -4,7 +4,7 @@
  * typed, immutable AssignmentDocumentModel. No I/O, no live clock reads:
  * `generatedAt` and `sourceDatasetRevision` are supplied by the caller.
  */
-import { computeShiftWindow, instantInWindow, localDateTimeToInstant } from "./time.js";
+import { computeShiftWindow, instantInWindow, resolveLocalDateTime } from "./time.js";
 import { cadenceMatches } from "./schedule.js";
 import type {
   Bed,
@@ -127,8 +127,13 @@ export function generateAssignmentDocument(input: GenerateAssignmentDocumentInpu
       for (const minutes of task.schedule.placement.minutes) {
         for (const occurrenceDate of candidateDates) {
           if (!cadenceMatches(task.schedule.cadence, occurrenceDate)) continue;
-          const instant = localDateTimeToInstant(occurrenceDate, minutes, facility.timeZone);
-          if (!instantInWindow(instant, window)) continue;
+          const resolved = resolveLocalDateTime(occurrenceDate, minutes, facility.timeZone);
+          if (!instantInWindow(resolved.instant, window)) continue;
+          if (resolved.gapAdjusted) {
+            warnings.push(
+              `${resident.firstName} ${resident.lastName} — "${task.catalog.name}" at ${formatHHmm(minutes)} on ${occurrenceDate} falls inside a daylight-saving-time gap; the scheduled time was moved forward by the gap duration.`
+            );
+          }
           rows.push({
             taskId: task.id,
             occurrenceKey: `${task.id}:${task.scheduleRevision}:${occurrenceDate}:${formatHHmm(minutes)}`,
