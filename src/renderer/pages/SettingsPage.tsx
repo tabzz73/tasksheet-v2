@@ -4,6 +4,9 @@ import { describeUseCaseError } from "../errorMessage.js";
 import { unwrapQuery } from "../ipcHelpers.js";
 import { useAuth } from "../auth/AuthContext.js";
 import { UsersAndAccessPanel } from "./UsersAndAccessPanel.js";
+import { SaveErrorDialog } from "../components/SaveErrorDialog.js";
+import { ConfirmDiscardDialog } from "../components/ConfirmDiscardDialog.js";
+import { clearAllDirty, isAnyDirty, setDirty } from "../dirtyRegistry.js";
 
 const COMMON_TIME_ZONES = [
   "America/New_York",
@@ -24,7 +27,8 @@ const EMPTY_FORM = {
   fax: "",
   timeZone: "America/Denver",
   weekStart: 1 as 1 | 7,
-  escalationThreshold: 3
+  escalationThreshold: 3,
+  inactivityLockMinutes: 10
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -40,7 +44,8 @@ function toForm(settings: FacilitySettings): FormState {
     fax: settings.fax ?? "",
     timeZone: settings.timeZone,
     weekStart: settings.weekStart,
-    escalationThreshold: settings.escalationThreshold
+    escalationThreshold: settings.escalationThreshold,
+    inactivityLockMinutes: settings.inactivityLockMinutes
   };
 }
 
@@ -50,6 +55,7 @@ function FacilityAndLocaleCategory(): React.JSX.Element {
   const [saved, setSaved] = useState<FormState>(EMPTY_FORM);
   const [status, setStatus] = useState<"idle" | "loading" | "saving">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
 
   useEffect(() => {
@@ -66,10 +72,15 @@ function FacilityAndLocaleCategory(): React.JSX.Element {
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(saved);
 
+  useEffect(() => {
+    setDirty("settings-facility", isDirty);
+    return () => setDirty("settings-facility", false);
+  }, [isDirty]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setStatus("saving");
-    setError(null);
+    setSaveError(null);
     setSavedMessage(false);
     const result = await window.tasksheet.facility.save({
       ...form,
@@ -84,7 +95,7 @@ function FacilityAndLocaleCategory(): React.JSX.Element {
     } else if (result.kind === "unauthenticated") {
       refresh();
     } else {
-      setError(describeUseCaseError(result));
+      setSaveError(describeUseCaseError(result));
     }
   }
 
@@ -165,6 +176,19 @@ function FacilityAndLocaleCategory(): React.JSX.Element {
             <option value={7}>Sunday</option>
           </select>
         </div>
+        <div className="field">
+          <label htmlFor="facility-inactivity-lock">Inactivity lock (minutes)</label>
+          <input
+            id="facility-inactivity-lock"
+            type="number"
+            min={5}
+            max={60}
+            required
+            value={form.inactivityLockMinutes}
+            onChange={(e) => setForm({ ...form, inactivityLockMinutes: Number(e.target.value) })}
+          />
+          <span className="field-hint">5–60 minutes of inactivity before the session locks. Default 10.</span>
+        </div>
 
         {error && (
           <p className="field-error" role="alert">
@@ -181,6 +205,7 @@ function FacilityAndLocaleCategory(): React.JSX.Element {
           {status === "saving" ? "Saving…" : "Save facility settings"}
         </button>
       </form>
+      {saveError && <SaveErrorDialog message={saveError} onClose={() => setSaveError(null)} />}
     </div>
   );
 }
@@ -195,8 +220,18 @@ export function SettingsPage(): React.JSX.Element {
   const { session } = useAuth();
   const isAdmin = session.role === "Administrator";
   const [category, setCategory] = useState<CategoryId>("facility");
+  const [pendingCategory, setPendingCategory] = useState<CategoryId | null>(null);
 
   const visibleCategories = CATEGORIES.filter((c) => c.id !== "access" || isAdmin);
+
+  function requestCategoryChange(next: CategoryId) {
+    if (next === category) return;
+    if (isAnyDirty()) {
+      setPendingCategory(next);
+    } else {
+      setCategory(next);
+    }
+  }
 
   return (
     <div style={{ display: "flex", gap: 16 }}>
@@ -207,7 +242,7 @@ export function SettingsPage(): React.JSX.Element {
               <button
                 className="app-nav__link"
                 aria-current={category === c.id ? "page" : undefined}
-                onClick={() => setCategory(c.id)}
+                onClick={() => requestCategoryChange(c.id)}
                 style={{ background: category === c.id ? "var(--color-panel)" : "transparent" }}
               >
                 {c.label}
@@ -220,6 +255,16 @@ export function SettingsPage(): React.JSX.Element {
         {category === "facility" && <FacilityAndLocaleCategory />}
         {category === "access" && isAdmin && <UsersAndAccessPanel />}
       </div>
+      {pendingCategory && (
+        <ConfirmDiscardDialog
+          onKeepEditing={() => setPendingCategory(null)}
+          onDiscard={() => {
+            clearAllDirty();
+            setCategory(pendingCategory);
+            setPendingCategory(null);
+          }}
+        />
+      )}
     </div>
   );
 }

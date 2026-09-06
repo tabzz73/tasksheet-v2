@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, powerMonitor } from "electron";
 import path from "node:path";
 import { openDatabase } from "../src/infra/db/connection.js";
+import { relocateLegacyStoreIfNeeded } from "../src/infra/db/legacyPathRelocation.js";
 import { createSqliteRepositories } from "../src/infra/db/sqliteRepositories.js";
 import { SystemClock } from "../src/application/clock.js";
 import { SessionManager } from "../src/application/auth/sessionManager.js";
@@ -48,12 +49,22 @@ const clock = new SystemClock();
 const sessions = new SessionManager();
 let repos: Repositories;
 
-/** Default inactivity lock, configurable 5-60 min by an Administrator (ACCESS-CONTROL.md §5). Not yet exposed in Settings UI — see milestone report. */
-const IDLE_LOCK_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_INACTIVITY_LOCK_MINUTES = 10;
+
+/** Reads the Administrator-configured inactivity timeout (5-60 min) on every sweep, so a change takes effect without restart. */
+function currentIdleLockTimeoutMs(): number {
+  const minutes = repos.facility.get()?.inactivityLockMinutes ?? DEFAULT_INACTIVITY_LOCK_MINUTES;
+  return minutes * 60 * 1000;
+}
 
 function dbFilePath(): string {
   // Path fixed by docs/adr/ADR-0001-production-persistence-boundary.md.
   return path.join(app.getPath("userData"), "data", "tasksheet.sqlite");
+}
+
+/** The path this app used before the ADR-0001 path was reconciled (commit a4966c0). */
+function legacyDbFilePath(): string {
+  return path.join(app.getPath("userData"), "tasksheet.sqlite3");
 }
 
 /** The sender's webContents id is the sole session key — never a renderer-supplied claim (ACCESS-CONTROL.md §4). */
@@ -126,15 +137,44 @@ function createWindow(): void {
   } else {
     void win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
+
+  // Normal application close must protect a dirty editor the same way
+  // in-app navigation does (UI-UX-SPEC.md §7): ask the renderer's own
+  // dirty registry via the confirmation function it exposes, and only
+  // actually close once it resolves true (either nothing was dirty, or
+  // the user explicitly chose Discard in the centered dialog).
+  let closeConfirmed = false;
+  win.on("close", (event) => {
+    if (closeConfirmed || win.webContents.isDestroyed()) return;
+    event.preventDefault();
+    win.webContents
+      .executeJavaScript("window.__tasksheetConfirmClose ? window.__tasksheetConfirmClose() : Promise.resolve(true)")
+      .then((proceed: boolean) => {
+        if (proceed) {
+          closeConfirmed = true;
+          win.close();
+        }
+      })
+      .catch(() => {
+        // If the renderer is in a state where it can't answer (e.g. mid-navigation
+        // teardown), fail safe by allowing the close rather than trapping the window.
+        closeConfirmed = true;
+        win.close();
+      });
+  });
 }
 
 app.whenReady().then(() => {
+  const relocation = relocateLegacyStoreIfNeeded(legacyDbFilePath(), dbFilePath());
+  if (relocation.relocated) {
+    console.log(`Relocated pre-ADR-0001 database from ${legacyDbFilePath()} to ${dbFilePath()}`);
+  }
   const db = openDatabase(dbFilePath());
   repos = createSqliteRepositories(db);
   registerIpcHandlers();
   createWindow();
 
-  setInterval(() => sessions.sweepIdleSessions(Date.now(), IDLE_LOCK_TIMEOUT_MS), 30_000);
+  setInterval(() => sessions.sweepIdleSessions(Date.now(), currentIdleLockTimeoutMs()), 30_000);
   // Lock on OS session lock/suspend; resume requires reauthentication (ACCESS-CONTROL.md §5).
   powerMonitor.on("lock-screen", () => sessions.lockAll());
   powerMonitor.on("suspend", () => sessions.lockAll());

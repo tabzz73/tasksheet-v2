@@ -18,6 +18,8 @@ export interface FacilitySettings {
   timeZone: string;
   weekStart: 1 | 7;
   escalationThreshold: number;
+  /** Administrator-configurable idle-lock timeout, 5-60 minutes, default 10 (ACCESS-CONTROL.md §5). */
+  inactivityLockMinutes: number;
 }
 
 export interface Room {

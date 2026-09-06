@@ -57,7 +57,8 @@ class SqliteFacilityRepository implements FacilityRepository {
       fax: (row.fax as string | null) ?? null,
       timeZone: row.time_zone as string,
       weekStart: row.week_start as 1 | 7,
-      escalationThreshold: row.escalation_threshold as number
+      escalationThreshold: row.escalation_threshold as number,
+      inactivityLockMinutes: (row.inactivity_lock_minutes as number | null) ?? 10
     };
   }
 
@@ -65,8 +66,8 @@ class SqliteFacilityRepository implements FacilityRepository {
     this.db
       .prepare(
         `INSERT INTO facility_settings
-          (facility_id, name, address_line1, address_line2, main_phone, nursing_phone, fax, time_zone, week_start, escalation_threshold)
-         VALUES (@facilityId, @name, @addressLine1, @addressLine2, @mainPhone, @nursingPhone, @fax, @timeZone, @weekStart, @escalationThreshold)
+          (facility_id, name, address_line1, address_line2, main_phone, nursing_phone, fax, time_zone, week_start, escalation_threshold, inactivity_lock_minutes)
+         VALUES (@facilityId, @name, @addressLine1, @addressLine2, @mainPhone, @nursingPhone, @fax, @timeZone, @weekStart, @escalationThreshold, @inactivityLockMinutes)
          ON CONFLICT(facility_id) DO UPDATE SET
            name = excluded.name,
            address_line1 = excluded.address_line1,
@@ -76,7 +77,8 @@ class SqliteFacilityRepository implements FacilityRepository {
            fax = excluded.fax,
            time_zone = excluded.time_zone,
            week_start = excluded.week_start,
-           escalation_threshold = excluded.escalation_threshold`
+           escalation_threshold = excluded.escalation_threshold,
+           inactivity_lock_minutes = excluded.inactivity_lock_minutes`
       )
       .run(settings);
   }

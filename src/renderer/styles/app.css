@@ -360,6 +360,11 @@ table.data-table td {
   margin-top: 8px;
   border-top: 1px solid black;
   padding-top: 4px;
+  /* The guide/source-of-truth notice sits after the table, once per document
+     (PRD.md §19.1 only requires headers to repeat, not this notice) — but on
+     a multi-page sheet it can still land right at a page boundary, so it
+     needs the same split protection as a data row or it can be cut in half. */
+  page-break-inside: avoid;
 }
 
 @media print {

@@ -154,6 +154,32 @@ describe("AC-48: password hashing, lockout, reset and recovery", () => {
     void admin;
   });
 
+  it("admin reset requires the ACTING admin's own current password (fresh reauthentication) — being merely logged in as admin is not enough", async () => {
+    await bootstrapAdmin("admin", "correct horse battery staple");
+    await login(repos, sessions, clock, "admin-sender", { alias: "admin", password: "correct horse battery staple" });
+    const created = await createAccount(repos, sessions, clock, "admin-sender", {
+      alias: "editor1",
+      password: "editor one starting password",
+      role: "Editor",
+      grants: []
+    });
+    if (created.kind !== "success") throw new Error("setup failed");
+
+    const wrongReauth = await adminResetPassword(repos, sessions, clock, "admin-sender", {
+      adminCurrentPassword: "definitely-not-the-admin-password",
+      targetAccountId: created.value.id,
+      newPassword: "a completely new editor password"
+    });
+    expect(wrongReauth.kind).toBe("forbidden");
+
+    // The target's password/verifier must be unchanged after a failed reauth attempt.
+    const stillOldPassword = await login(repos, sessions, clock, "editor-sender", {
+      alias: "editor1",
+      password: "editor one starting password"
+    });
+    expect(stillOldPassword.kind).toBe("success");
+  });
+
   it("recovery code resets the admin password once and rotates itself", async () => {
     const { recoveryCode } = await bootstrapAdmin("admin", "correct horse battery staple");
     const recovered = await recoverWithCode(repos, sessions, clock, { code: recoveryCode, newAdminPassword: "post recovery admin password" });

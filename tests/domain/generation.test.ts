@@ -13,7 +13,8 @@ const facility: FacilitySettings = {
   fax: null,
   timeZone: "America/Denver",
   weekStart: 1,
-  escalationThreshold: 3
+  escalationThreshold: 3,
+        inactivityLockMinutes: 10
 };
 
 const hcaShift: Shift = {

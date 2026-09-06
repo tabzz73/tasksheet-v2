@@ -39,7 +39,8 @@ describe("AC-04: restart persistence", () => {
         fax: null,
         timeZone: "America/Denver",
         weekStart: 1,
-        escalationThreshold: 3
+        escalationThreshold: 3,
+        inactivityLockMinutes: 10
       });
       repos.rooms.create({ id: "room-1", label: "101", sortKey: "000101", active: true });
       repos.beds.create({ id: "bed-1", roomId: "room-1", label: "A", active: true });

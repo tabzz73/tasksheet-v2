@@ -3,6 +3,7 @@ import type { Shift } from "../../domain/entities.js";
 import { formatHHmm } from "../../domain/types.js";
 import { Dialog } from "../components/Dialog.js";
 import { ConfirmDiscardDialog } from "../components/ConfirmDiscardDialog.js";
+import { SaveErrorDialog } from "../components/SaveErrorDialog.js";
 import { useDirtyGuard } from "../components/useDirtyGuard.js";
 import { describeUseCaseError } from "../errorMessage.js";
 import { unwrapQuery } from "../ipcHelpers.js";
@@ -13,7 +14,7 @@ const EMPTY = { shortCode: "", name: "", role: "HCA" as "HCA" | "LPN", startTime
 
 function AddShiftDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }): React.JSX.Element {
   const [form, setForm] = useState(EMPTY);
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const isDirty = JSON.stringify(form) !== JSON.stringify(EMPTY);
   const guard = useDirtyGuard(isDirty, onClose);
@@ -21,20 +22,20 @@ function AddShiftDialog({ onClose, onCreated }: { onClose: () => void; onCreated
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError(null);
+    setSaveError(null);
     const result = await window.tasksheet.shifts.create(form);
     setSaving(false);
     if (result.kind === "success") {
       onCreated();
       onClose();
     } else {
-      setError(describeUseCaseError(result));
+      setSaveError(describeUseCaseError(result));
     }
   }
 
   return (
     <>
-      <Dialog titleId="add-shift-title" title="Add shift" onRequestClose={guard.requestClose} inert={guard.confirmOpen}>
+      <Dialog titleId="add-shift-title" title="Add shift" onRequestClose={guard.requestClose} inert={guard.confirmOpen || Boolean(saveError)}>
         <form onSubmit={onSubmit} noValidate>
           <div className="field">
             <label htmlFor="shift-short-code">Short code</label>
@@ -84,17 +85,13 @@ function AddShiftDialog({ onClose, onCreated }: { onClose: () => void; onCreated
             />
             <span className="field-hint">An end time at or before the start time makes this an overnight shift.</span>
           </div>
-          {error && (
-            <p className="field-error" role="alert">
-              {error}
-            </p>
-          )}
           <button className="btn btn--primary" type="submit" disabled={saving}>
             {saving ? "Saving…" : "Add shift"}
           </button>
         </form>
       </Dialog>
       {guard.confirmOpen && <ConfirmDiscardDialog onKeepEditing={guard.keepEditing} onDiscard={guard.discard} />}
+      {saveError && <SaveErrorDialog message={saveError} onClose={() => setSaveError(null)} />}
     </>
   );
 }

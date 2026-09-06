@@ -178,6 +178,15 @@ export const MIGRATIONS: readonly Migration[] = [
         INSERT INTO recovery_code (id, verifier) VALUES (1, NULL);
       `);
     }
+  },
+  {
+    version: 3,
+    name: "administrator-configurable inactivity lock timeout (ACCESS-CONTROL.md §5)",
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE facility_settings ADD COLUMN inactivity_lock_minutes INTEGER NOT NULL DEFAULT 10;
+      `);
+    }
   }
 ];
 

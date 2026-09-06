@@ -13,7 +13,9 @@ export const SaveFacilitySettingsInput = z.object({
   fax: z.string().nullable().default(null),
   timeZone: z.string().min(1, "Timezone is required"),
   weekStart: z.union([z.literal(1), z.literal(7)]),
-  escalationThreshold: z.number().int().positive().default(3)
+  escalationThreshold: z.number().int().positive().default(3),
+  // Bounds fixed by ACCESS-CONTROL.md §5: "configurable by Administrator from 5-60 minutes."
+  inactivityLockMinutes: z.number().int().min(5, "Inactivity lock must be at least 5 minutes").max(60, "Inactivity lock must be at most 60 minutes").default(10)
 });
 export type SaveFacilitySettingsInput = z.input<typeof SaveFacilitySettingsInput>;
 
