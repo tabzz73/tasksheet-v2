@@ -1,46 +1,64 @@
-# 0001 — Production persistence boundary
+# ADR-0001 — SQLite production persistence
 
-Status: Accepted
+Status: Adopted implementation baseline; implementation and migration verification pending.
 Date: 2026-09-05
+Authority: subordinate to PRD and architecture documents. Added under the user's request to complete implementation guidance. No existing installation has been migrated by this documentation change.
 
-## Context
+## Context and decision
 
-`PRD.md` §20 and `ARCHITECTURE-ESSENTIALS.md` §3.1 already require that production TaskSheet V2 data live in a single local, main-process-owned SQLite store under the OS-provided Electron application-data directory (`app.getPath("userData")`), reached from the renderer only through narrow typed/validated preload IPC use cases. This document had not yet been written down as an ADR despite being referenced by name from `PRD.md`, `ARCHITECTURE-ESSENTIALS.md`, `AGENTS.md` and `IMPLEMENTATION-PLAN.md`. This ADR records that already-controlling decision and the concrete binding/runtime choice needed to implement it, so the reference resolves to a real, versioned decision instead of a missing file.
+TaskSheet needs related resident, placement, schedule, occurrence, provenance, and configuration records with recoverable mutations. Select SQLite in `app.getPath("userData")/data/tasksheet.sqlite`, owned by the Electron main process. This is one workstation's database, not a shared network database. The renderer uses allow-listed application commands and typed queries through preload IPC; it receives no database connection, SQL, or arbitrary file operations.
 
-Phase 0 inspection of this repository found no prior application code, package manifest, or persistence implementation — the repository previously contained only the specification suite. There is therefore no existing storage engine, schema, or release to migrate away from; this ADR selects the initial production engine rather than replacing one.
+Use foreign-key enforcement on every connection, WAL journaling, `synchronous=FULL`, and bounded lock waits with actionable errors. Serialize application writes. Use transaction-scoped repositories and a single application instance. Commit related changes together, including command deduplication and revision updates. Never claim immunity from disk failure or hardware that fails to honor durability requests.
 
-## Decision
+Select and pin the Electron-compatible SQLite binding during phase 0, based on actual Windows packaging and backup tests; this driver choice does not reopen the SQLite engine decision. Do not invent an installed runtime version or reuse another project's package versions.
 
-- Production engine: SQLite, accessed from the Electron **main process only**, via the `better-sqlite3` synchronous native binding.
-- Location: `path.join(app.getPath("userData"), "tasksheet.sqlite3")`, created on first run.
-- The renderer never opens the database file, never receives a raw file-system path, and never gets a generic key-value or query bridge. It calls narrow, named, validated IPC use cases (e.g. `facility:save`, `shift:create`, `resident:place`, `assignment:generate`) exposed through a `contextBridge` preload script with Node integration disabled in the renderer.
-- Every table carries a `schema_version` row in a dedicated `meta` table; migrations are ordered, numbered SQL/TS modules applied inside a transaction, one version at a time, and are re-run-safe (idempotent no-op when already applied).
-- Mutations that touch more than one row/table run inside a single `db.transaction(...)`; a save is atomic from the user's perspective — either fully committed or fully rolled back.
-- Backups are explicit snapshot exports (SQLite online backup API / `VACUUM INTO`), never a raw copy of the live file while WAL may be mid-write, and never a live sync target.
-- For local development and unit/integration tests, the same `better-sqlite3` engine runs directly under Node (no Electron required) against a temp-file or in-memory database. Browser/renderer `localStorage` is never used to hold production records; where referenced at all, it is limited to non-authoritative, isolated UI-only state (e.g. a "which nav item was open" convenience) or controlled legacy-data migration input, per Architecture Essentials §3.1.
+## Alternatives
 
-## Alternatives considered
+| Option | Disposition |
+| --- | --- |
+| Main-process versioned JSON | Simpler early setup, but whole-dataset writes and relational invariants need more custom machinery; retained as logical exchange format only |
+| SQLite | Selected for transactional relationships, constraints, and structured queries |
+| Renderer localStorage | Legacy migration input or isolated tests only; prohibited production authority |
+| Shared/network/cloud database | Outside V2 scope |
 
-- **Renderer-owned SQLite (e.g. `sql.js` in the browser context, persisted to `localStorage`/IndexedDB):** rejected — `ARCHITECTURE-ESSENTIALS.md` §3.1 explicitly prohibits renderer/browser storage as the authoritative production store.
-- **`node:sqlite` (Node's built-in SQLite, stable since Node 22):** considered because it needs no native rebuild step. Rejected for this repository's pinned Electron target because Electron's bundled Node/V8 version lags the host Node used for tooling, so `node:sqlite`'s availability and API stability inside the packaged Electron main process cannot yet be confirmed against the actual pinned Electron release; `better-sqlite3` has a mature `electron-rebuild`/prebuild path. This choice should be revisited once an exact Electron version is pinned and packaged for Windows.
-- **`sqlite3` (async node-sqlite3):** rejected — asynchronous callback/promise API adds complexity with no benefit for a single-workstation, single-connection desktop app; `better-sqlite3`'s synchronous API makes transactional use cases easier to keep correct.
-- **A flat JSON/file-per-entity store:** rejected — cannot satisfy the transactional-mutation, atomic-save and relational-integrity requirements in `ARCHITECTURE-ESSENTIALS.md` §3.1 (e.g. one-current-placement-per-resident-and-bed).
+## Schema and transaction rules
 
-## Consequences
+Use stable IDs and indexed foreign keys. Store migration version/checksum records, dataset revision, and an installation migration marker. Apply one explicit schema step at a time. Reject a database created by an unsupported future schema version; never initialize over an unrecognized or corrupt store. Inspect integrity and domain invariants before accepting a migrated store.
 
-- Native module: `better-sqlite3` must be rebuilt against the exact packaged Electron ABI before Windows packaging (`electron-rebuild` or prebuilt binaries). This is a pending packaging-time step, tracked as a phase 6 gate; it does not block phase 0/1 work run directly under Node.
-- All schema changes must ship as new numbered migrations; hand-editing the schema of an existing database is prohibited.
-- IPC surface must be enumerated and validated (this repository uses `zod` schemas per channel); adding a new persistence capability means adding a new named, validated use case, not widening an existing one.
-- Because there was no prior implementation, there is no legacy schema to map in phase 0; legacy-migration mapping only applies if/when a pre-V2 data source is identified.
+Use optimistic revisions for stale forms and a unique command ID for retry safety. A failed command must not partially update placements, wound-linked schedules, follow-up states, or provenance.
 
-## Migration and rollback
+## Backup format and compatibility
 
-- Forward: numbered migrations in `electron/db/migrations/*.ts`, applied in order inside one transaction per migration, recorded in `meta.schema_version`.
-- Rollback: because V2 has no prior shipped release, there is no "downgrade" path required yet; a failed migration leaves the previous file untouched (migrations run against a copy-on-write staging step described in the persistence module) and the applied-version row is only updated after a successful commit.
-- Backup/restore: `Export Backup` performs `VACUUM INTO <path>`; `Restore Backup` validates the candidate file's `schema_version` and integrity (`PRAGMA integrity_check`) into a temp path before atomically replacing the active store, preserving the prior active store until the new one is verified.
+Full backup format: `.tasksheet-backup`, a ZIP containing `manifest.json` and `data.sqlite`. Manifest fields: product `TaskSheet`, formatVersion `1`, schemaVersion, appVersion, exportedAt UTC, datasetRevision, per-table recordCounts, and SHA-256 for `data.sqlite`. Do not include OS usernames, original absolute paths or employee profiles. Under ADR-0002 the native data.sqlite snapshot includes minimal local account verifiers/grants/security audit and is sensitive and Administrator-only; these are excluded from logical exports. A checksum detects accidental alteration; it is not authentication or encryption.
 
-## Tests and documents affected
+Create a consistent SQLite snapshot through the binding's Online Backup API, close and validate the destination, then package it. Do not copy a live database file alone: committed content can reside in WAL sidecars. Verify integrity, foreign keys, manifest counts and checksum before success. Backups may be saved to a user-selected external location as inactive copies.
 
-- `tests/persistence/*` (round-trip save/restart, migration apply/idempotency, transactional atomicity).
-- `ARCHITECTURE.md`, `IMPLEMENTATION-PLAN.md` phase 0/6 exit evidence.
-- This ADR is the authoritative answer to the file path referenced throughout the higher-authority suite; it does not change or weaken any PRD/Architecture Essentials rule.
+CSV, Excel `.xlsx`, and JSON logical exchange for the whole database and both separate catalogs is defined in `../../DATA-EXCHANGE.md`. Whole-database logical import rebuilds a validated candidate SQLite database; catalog imports use scoped transactions. The native `.tasksheet-backup` remains the exact SQLite snapshot recovery format. Legacy versioned JSON is supported only through an explicit importer for recognized schemas; unknown layouts are rejected without changes.
+
+## Legacy migration and rollback
+
+1. Detect the actual legacy schema and inventory its keys; do not assume prior documentation proves the on-disk format.
+2. Preserve a recoverable source snapshot. Validate records and preview exclusions, including prohibited staff fields. Do not silently discard or republish those fields; surface counts without identity values and require review of the sanitized candidate.
+3. Build a new candidate SQLite database. Preserve IDs, dates, catalog snapshots, provenance, and references. Ambiguous legacy follow-up occurrence dates become migration issues requiring resolution, not guessed dates.
+4. Validate the candidate and mark its source fingerprint in the same completed migration state.
+5. Close handles, activate the candidate using a recoverable file-switch sequence, reopen and verify it, then record completion. Interrupted activation must recover deterministically to the old or validated new store, never an empty dataset.
+6. Keep the source isolated for rollback; never run old and new versions as concurrent authorities. Rolling back to a pre-migration snapshot loses subsequent V2 changes unless separately exported and reconciled; state this before rollback.
+
+For restore, validate ZIP entries against path traversal and size limits, checksum and schema before activation. Freeze writes, create a pre-restore backup, close SQLite connections, and activate the validated candidate without mixing old WAL/SHM files into the new database. Retain a recovery marker and old store until reopening succeeds. A stale restore preview is invalidated by any intervening data change.
+
+## Security and diagnostics
+
+No employee profile domain. ADR-0002 permits minimal local accounts/security tables with offline authentication and authorization. Native backups carry those tables; normal restore preserves receiving security policy and fresh-machine recovery authenticates against the backup before activation. Actual paths appear only in explicit local transient diagnostics. SQLite/native backup do not imply encryption at rest or regulatory certification, and specified authentication is not claimed implemented until verified.
+
+## Required evidence
+
+- Packaged Windows read/write and restart with renderer storage cleared.
+- Rejected malformed IPC, stale revision and duplicate command behavior.
+- Interrupted transaction and interrupted migration/restore activation recovery.
+- Backup while WAL has committed data; restore yields matching logical records.
+- Unknown schema, corrupted payload, traversal ZIP and checksum failures leave active data unchanged.
+- Uninstall/reinstall retention, Windows-user separation, offline launch and privacy-safe diagnostics.
+
+## Technical references
+
+SQLite's [Online Backup API](https://www.sqlite.org/backup.html) provides consistent live-database snapshots. SQLite's [WAL documentation](https://www.sqlite.org/wal.html) describes sidecar files, checkpointing, durability settings, and same-host restrictions. These support this design; the application still requires packaged failure/recovery verification.

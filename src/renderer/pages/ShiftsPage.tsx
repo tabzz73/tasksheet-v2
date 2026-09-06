@@ -4,6 +4,10 @@ import { formatHHmm } from "../../domain/types.js";
 import { Dialog } from "../components/Dialog.js";
 import { ConfirmDiscardDialog } from "../components/ConfirmDiscardDialog.js";
 import { useDirtyGuard } from "../components/useDirtyGuard.js";
+import { describeUseCaseError } from "../errorMessage.js";
+import { unwrapQuery } from "../ipcHelpers.js";
+import { useAuth } from "../auth/AuthContext.js";
+import { effectiveCapabilities } from "../../domain/accounts.js";
 
 const EMPTY = { shortCode: "", name: "", role: "HCA" as "HCA" | "LPN", startTime: "0700", endTime: "1500" };
 
@@ -24,7 +28,7 @@ function AddShiftDialog({ onClose, onCreated }: { onClose: () => void; onCreated
       onCreated();
       onClose();
     } else {
-      setError(result.message);
+      setError(describeUseCaseError(result));
     }
   }
 
@@ -96,23 +100,37 @@ function AddShiftDialog({ onClose, onCreated }: { onClose: () => void; onCreated
 }
 
 export function ShiftsPage(): React.JSX.Element {
+  const { session, refresh } = useAuth();
   const [shifts, setShifts] = useState<readonly Shift[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const canCreateShift = effectiveCapabilities(session.role, session.grants).has("shift.create");
 
   function reload() {
-    window.tasksheet.shifts.list().then(setShifts);
+    window.tasksheet.shifts.list().then((result) => {
+      const value = unwrapQuery(result, refresh, setError);
+      if (value) setShifts(value);
+    });
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(reload, []);
 
   return (
     <div className="panel">
       <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>Shifts</h2>
-        <button className="btn btn--primary" onClick={() => setDialogOpen(true)}>
-          Add shift
-        </button>
+        {canCreateShift && (
+          <button className="btn btn--primary" onClick={() => setDialogOpen(true)}>
+            Add shift
+          </button>
+        )}
       </div>
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
 
       {shifts === null && <p role="status">Loading…</p>}
       {shifts !== null && shifts.length === 0 && (

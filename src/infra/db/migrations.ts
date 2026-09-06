@@ -132,6 +132,52 @@ export const MIGRATIONS: readonly Migration[] = [
         INSERT INTO meta (key, value) VALUES ('dataset_revision', '0');
       `);
     }
+  },
+  {
+    version: 2,
+    name: "local accounts, grants, security audit (ACCESS-CONTROL.md / ADR-0002)",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE accounts (
+          id TEXT PRIMARY KEY,
+          alias TEXT NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('Administrator','Editor','Viewer')),
+          grants_json TEXT NOT NULL DEFAULT '[]',
+          password_verifier TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          must_change_password INTEGER NOT NULL DEFAULT 0,
+          auth_revision INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        -- Alias uniqueness is case-insensitive so "Admin" and "admin" cannot collide.
+        CREATE UNIQUE INDEX idx_accounts_alias ON accounts(alias COLLATE NOCASE);
+
+        CREATE TABLE login_lockouts (
+          account_id TEXT PRIMARY KEY REFERENCES accounts(id),
+          failed_attempts INTEGER NOT NULL DEFAULT 0,
+          window_started_at TEXT,
+          cooldown_until TEXT
+        );
+
+        CREATE TABLE security_events (
+          id TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          actor_account_id TEXT,
+          target_account_id TEXT,
+          reason TEXT,
+          occurred_at TEXT NOT NULL
+        );
+
+        -- Singleton row holding the current recovery-code verifier (ACCESS-CONTROL.md §6).
+        CREATE TABLE recovery_code (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          verifier TEXT
+        );
+        INSERT INTO recovery_code (id, verifier) VALUES (1, NULL);
+      `);
+    }
   }
 ];
 

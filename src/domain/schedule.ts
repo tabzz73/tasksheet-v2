@@ -6,9 +6,11 @@
  * that rather than silently approximating it.
  */
 import {
+  addDaysToLocalDate,
   compareLocalDate,
   dayOfMonthOf,
   daysBetween,
+  formatHHmm,
   isoWeekdayOf,
   type LocalDate,
   type LocalTime,
@@ -84,6 +86,47 @@ export function validatePlacement(placement: Placement): void {
  * nonexistent month day (e.g. 31 in February) is skipped, never clamped,
  * because the caller only ever asks about real calendar dates.
  */
+export interface OccurrencePreview {
+  date: LocalDate;
+  /** HHmm strings for a "times" placement, or a placement-kind label otherwise. */
+  labels: readonly string[];
+}
+
+/**
+ * Lists the next `count` occurrence dates on or after `fromDate` (bounded by
+ * `activeTo` when given), for the task editor's "next occurrences" review
+ * step (UI-UX-SPEC.md §6). Calendar-only — does not resolve facility
+ * timezone instants or shift-window membership; that's the generation
+ * pipeline's job (see generateAssignmentDocument), not a pre-save preview.
+ */
+export function nextOccurrencePreviews(
+  schedule: Schedule,
+  fromDate: LocalDate,
+  count: number,
+  activeTo: LocalDate | null = null
+): readonly OccurrencePreview[] {
+  const labels =
+    schedule.placement.kind === "times"
+      ? schedule.placement.minutes.map((m) => formatHHmm(m))
+      : schedule.placement.kind === "period"
+        ? [schedule.placement.period]
+        : ["(date only)"];
+
+  const results: OccurrencePreview[] = [];
+  let date = fromDate;
+  // Bounded scan: interval/month_days cadences can skip many days between
+  // matches, but a task editor preview never needs to look further than a
+  // year out to find `count` occurrences.
+  for (let i = 0; i < 366 && results.length < count; i++) {
+    if (activeTo !== null && compareLocalDate(date, activeTo) > 0) break;
+    if (cadenceMatches(schedule.cadence, date)) {
+      results.push({ date, labels });
+    }
+    date = addDaysToLocalDate(date, 1);
+  }
+  return results;
+}
+
 export function cadenceMatches(cadence: Cadence, date: LocalDate): boolean {
   switch (cadence.kind) {
     case "daily":

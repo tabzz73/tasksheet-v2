@@ -1,16 +1,25 @@
 import React, { useEffect, useState } from "react";
 import type { Bed, Placement, Resident, Room, Shift } from "../../domain/entities.js";
-import { Dialog } from "../components/Dialog.js";
+import { StepDialog } from "../components/StepDialog.js";
 import { ConfirmDiscardDialog } from "../components/ConfirmDiscardDialog.js";
+import { SaveErrorDialog } from "../components/SaveErrorDialog.js";
 import { useDirtyGuard } from "../components/useDirtyGuard.js";
+import { describeUseCaseError } from "../errorMessage.js";
+import { unwrapQuery } from "../ipcHelpers.js";
+import { useAuth } from "../auth/AuthContext.js";
+import { effectiveCapabilities } from "../../domain/accounts.js";
+import { nextOccurrencePreviews } from "../../domain/schedule.js";
+import { parseHHmm, toLocalDate } from "../../domain/types.js";
 
 interface RoomsAndBedsPanelProps {
   rooms: readonly Room[];
   beds: readonly Bed[];
   onChanged: () => void;
+  canCreateRoom: boolean;
+  canCreateBed: boolean;
 }
 
-function RoomsAndBedsPanel({ rooms, beds, onChanged }: RoomsAndBedsPanelProps): React.JSX.Element {
+function RoomsAndBedsPanel({ rooms, beds, onChanged, canCreateRoom, canCreateBed }: RoomsAndBedsPanelProps): React.JSX.Element {
   const [roomLabel, setRoomLabel] = useState("");
   const [bedRoomId, setBedRoomId] = useState("");
   const [bedLabel, setBedLabel] = useState("");
@@ -24,7 +33,7 @@ function RoomsAndBedsPanel({ rooms, beds, onChanged }: RoomsAndBedsPanelProps): 
       setRoomLabel("");
       onChanged();
     } else {
-      setError(result.message);
+      setError(describeUseCaseError(result));
     }
   }
 
@@ -36,7 +45,7 @@ function RoomsAndBedsPanel({ rooms, beds, onChanged }: RoomsAndBedsPanelProps): 
       setBedLabel("");
       onChanged();
     } else {
-      setError(result.message);
+      setError(describeUseCaseError(result));
     }
   }
 
@@ -48,43 +57,51 @@ function RoomsAndBedsPanel({ rooms, beds, onChanged }: RoomsAndBedsPanelProps): 
           {error}
         </p>
       )}
-      <div className="toolbar" style={{ alignItems: "flex-end" }}>
-        <form onSubmit={addRoom} className="toolbar" style={{ alignItems: "flex-end" }}>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="room-label">Room label</label>
-            <input id="room-label" required placeholder="101" value={roomLabel} onChange={(e) => setRoomLabel(e.target.value)} />
-          </div>
-          <button className="btn" type="submit">
-            Add room
-          </button>
-        </form>
-        <form onSubmit={addBed} className="toolbar" style={{ alignItems: "flex-end" }}>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="bed-room">Room</label>
-            <select id="bed-room" required value={bedRoomId} onChange={(e) => setBedRoomId(e.target.value)}>
-              <option value="">Select a room…</option>
-              {rooms.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="bed-label">Bed label</label>
-            <input id="bed-label" required placeholder="A" value={bedLabel} onChange={(e) => setBedLabel(e.target.value)} />
-          </div>
-          <button className="btn" type="submit" disabled={!bedRoomId}>
-            Add bed
-          </button>
-        </form>
-      </div>
+      {(canCreateRoom || canCreateBed) && (
+        <div className="toolbar" style={{ alignItems: "flex-end" }}>
+          {canCreateRoom && (
+            <form onSubmit={addRoom} className="toolbar" style={{ alignItems: "flex-end" }}>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label htmlFor="room-label">Room label</label>
+                <input id="room-label" required placeholder="101" value={roomLabel} onChange={(e) => setRoomLabel(e.target.value)} />
+              </div>
+              <button className="btn" type="submit">
+                Add room
+              </button>
+            </form>
+          )}
+          {canCreateBed && (
+            <form onSubmit={addBed} className="toolbar" style={{ alignItems: "flex-end" }}>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label htmlFor="bed-room">Room</label>
+                <select id="bed-room" required value={bedRoomId} onChange={(e) => setBedRoomId(e.target.value)}>
+                  <option value="">Select a room…</option>
+                  {rooms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label htmlFor="bed-label">Bed label</label>
+                <input id="bed-label" required placeholder="A" value={bedLabel} onChange={(e) => setBedLabel(e.target.value)} />
+              </div>
+              <button className="btn" type="submit" disabled={!bedRoomId}>
+                Add bed
+              </button>
+            </form>
+          )}
+        </div>
+      )}
       <p className="field-hint">{beds.length} bed(s) across {rooms.length} room(s).</p>
     </div>
   );
 }
 
 const EMPTY_RESIDENT_FORM = { firstName: "", lastName: "", bedId: "", startDate: new Date().toISOString().slice(0, 10) };
+
+const RESIDENT_STEPS = ["Identity", "Placement & Status", "Review"] as const;
 
 function AddResidentDialog({
   beds,
@@ -100,21 +117,34 @@ function AddResidentDialog({
   onCreated: () => void;
 }): React.JSX.Element {
   const [form, setForm] = useState(EMPTY_RESIDENT_FORM);
-  const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const isDirty = JSON.stringify(form) !== JSON.stringify(EMPTY_RESIDENT_FORM);
   const guard = useDirtyGuard(isDirty, onClose);
 
   const availableBeds = beds.filter((b) => !occupiedBedIds.has(b.id));
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function roomLabelFor(bedId: string): string {
+    const bed = beds.find((b) => b.id === bedId);
+    const room = rooms.find((r) => r.id === bed?.roomId);
+    return room ? `${room.label} / ${bed?.label}` : (bed?.label ?? bedId);
+  }
+
+  const stepValid =
+    step === 0
+      ? form.firstName.trim() !== "" && form.lastName.trim() !== ""
+      : step === 1
+        ? form.bedId !== "" && form.startDate !== ""
+        : true;
+
+  async function onSave() {
     setSaving(true);
-    setError(null);
+    setSaveError(null);
     const residentResult = await window.tasksheet.residents.create({ firstName: form.firstName, lastName: form.lastName });
     if (residentResult.kind !== "success") {
       setSaving(false);
-      setError(residentResult.message);
+      setSaveError(describeUseCaseError(residentResult));
       return;
     }
     const placementResult = await window.tasksheet.placements.create({
@@ -124,25 +154,37 @@ function AddResidentDialog({
     });
     setSaving(false);
     if (placementResult.kind !== "success") {
-      setError(`Resident created, but placement failed: ${placementResult.message}`);
+      setSaveError(`Resident created, but placement failed: ${describeUseCaseError(placementResult)}`);
       return;
     }
     onCreated();
     onClose();
   }
 
-  function roomLabelFor(bedId: string): string {
-    const bed = beds.find((b) => b.id === bedId);
-    const room = rooms.find((r) => r.id === bed?.roomId);
-    return room ? `${room.label} / ${bed?.label}` : (bed?.label ?? bedId);
+  function onNext() {
+    if (!stepValid) return;
+    if (step < RESIDENT_STEPS.length - 1) setStep(step + 1);
+    else void onSave();
   }
 
   return (
     <>
-      <Dialog titleId="add-resident-title" title="Add resident" onRequestClose={guard.requestClose} inert={guard.confirmOpen}>
-        <form onSubmit={onSubmit} noValidate>
-          <fieldset style={{ border: "none", padding: 0, marginBottom: 12 }}>
-            <legend style={{ fontWeight: 700, fontSize: 13 }}>Identity</legend>
+      <StepDialog
+        titleId="add-resident-title"
+        title="Add resident"
+        steps={RESIDENT_STEPS}
+        currentStep={step}
+        onStepChange={setStep}
+        onRequestClose={guard.requestClose}
+        inert={guard.confirmOpen || Boolean(saveError)}
+        onBack={() => setStep(Math.max(0, step - 1))}
+        onNext={onNext}
+        isLastStep={step === RESIDENT_STEPS.length - 1}
+        submitting={saving}
+        submitLabel="Add resident"
+      >
+        {step === 0 && (
+          <>
             <div className="field">
               <label htmlFor="resident-first-name">First name</label>
               <input
@@ -150,6 +192,7 @@ function AddResidentDialog({
                 required
                 value={form.firstName}
                 onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                autoFocus
               />
             </div>
             <div className="field">
@@ -161,9 +204,10 @@ function AddResidentDialog({
                 onChange={(e) => setForm({ ...form, lastName: e.target.value })}
               />
             </div>
-          </fieldset>
-          <fieldset style={{ border: "none", padding: 0 }}>
-            <legend style={{ fontWeight: 700, fontSize: 13 }}>Placement</legend>
+          </>
+        )}
+        {step === 1 && (
+          <>
             <div className="field">
               <label htmlFor="resident-bed">Bed</label>
               <select id="resident-bed" required value={form.bedId} onChange={(e) => setForm({ ...form, bedId: e.target.value })}>
@@ -186,18 +230,31 @@ function AddResidentDialog({
                 onChange={(e) => setForm({ ...form, startDate: e.target.value })}
               />
             </div>
-          </fieldset>
-          {error && (
-            <p className="field-error" role="alert">
-              {error}
-            </p>
-          )}
-          <button className="btn btn--primary" type="submit" disabled={saving || availableBeds.length === 0}>
-            {saving ? "Saving…" : "Add resident"}
-          </button>
-        </form>
-      </Dialog>
+          </>
+        )}
+        {step === 2 && (
+          <div>
+            <dl>
+              <dt style={{ fontWeight: 600 }}>Name</dt>
+              <dd>
+                {form.firstName} {form.lastName}{" "}
+                <button type="button" className="btn" onClick={() => setStep(0)}>
+                  Edit
+                </button>
+              </dd>
+              <dt style={{ fontWeight: 600, marginTop: 8 }}>Placement</dt>
+              <dd>
+                {form.bedId ? roomLabelFor(form.bedId) : "(none selected)"} starting {form.startDate}{" "}
+                <button type="button" className="btn" onClick={() => setStep(1)}>
+                  Edit
+                </button>
+              </dd>
+            </dl>
+          </div>
+        )}
+      </StepDialog>
       {guard.confirmOpen && <ConfirmDiscardDialog onKeepEditing={guard.keepEditing} onDiscard={guard.discard} />}
+      {saveError && <SaveErrorDialog message={saveError} onClose={() => setSaveError(null)} />}
     </>
   );
 }
@@ -211,6 +268,8 @@ const EMPTY_TASK_FORM = {
   activeFrom: new Date().toISOString().slice(0, 10)
 };
 
+const TASK_STEPS = ["Task & Resident", "Schedule & Assignment", "Instructions & Visibility", "Review"] as const;
+
 function AddTaskDialog({
   resident,
   shifts,
@@ -223,7 +282,8 @@ function AddTaskDialog({
   onCreated: () => void;
 }): React.JSX.Element {
   const [form, setForm] = useState(EMPTY_TASK_FORM);
-  const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const isDirty = JSON.stringify(form) !== JSON.stringify(EMPTY_TASK_FORM);
   const guard = useDirtyGuard(isDirty, onClose);
@@ -236,10 +296,28 @@ function AddTaskDialog({
     }));
   }
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const stepValid =
+    step === 0
+      ? form.taskName.trim() !== ""
+      : step === 1
+        ? form.eligibleShiftIds.length > 0 && /^([01]\d|2[0-3])[0-5]\d$/.test(form.time)
+        : true;
+
+  const nextOccurrences = (() => {
+    try {
+      return nextOccurrencePreviews(
+        { cadence: { kind: "daily" }, placement: { kind: "times", minutes: [parseHHmm(form.time)] } },
+        toLocalDate(form.activeFrom),
+        7
+      );
+    } catch {
+      return [];
+    }
+  })();
+
+  async function onSave() {
     setSaving(true);
-    setError(null);
+    setSaveError(null);
     const result = await window.tasksheet.residentTasks.create({
       residentId: resident.id,
       role: form.role,
@@ -255,67 +333,132 @@ function AddTaskDialog({
       onCreated();
       onClose();
     } else {
-      setError(result.message);
+      setSaveError(describeUseCaseError(result));
     }
+  }
+
+  function onNext() {
+    if (!stepValid) return;
+    if (step < TASK_STEPS.length - 1) setStep(step + 1);
+    else void onSave();
   }
 
   return (
     <>
-      <Dialog
+      <StepDialog
         titleId="add-task-title"
         title={`Add care task for ${resident.firstName} ${resident.lastName}`}
+        steps={TASK_STEPS}
+        currentStep={step}
+        onStepChange={setStep}
         onRequestClose={guard.requestClose}
-        inert={guard.confirmOpen}
+        inert={guard.confirmOpen || Boolean(saveError)}
+        onBack={() => setStep(Math.max(0, step - 1))}
+        onNext={onNext}
+        isLastStep={step === TASK_STEPS.length - 1}
+        submitting={saving}
+        submitLabel="Add task"
       >
-        <form onSubmit={onSubmit} noValidate>
-          <div className="field">
-            <label htmlFor="task-name">Task name</label>
-            <input id="task-name" required value={form.taskName} onChange={(e) => setForm({ ...form, taskName: e.target.value })} />
+        {step === 0 && (
+          <>
+            <p className="field-hint">Resident: {resident.firstName} {resident.lastName}</p>
+            <div className="field">
+              <label htmlFor="task-name">Task name</label>
+              <input id="task-name" required value={form.taskName} onChange={(e) => setForm({ ...form, taskName: e.target.value })} autoFocus />
+            </div>
+            <div className="field">
+              <label htmlFor="task-role">Role</label>
+              <select
+                id="task-role"
+                value={form.role}
+                onChange={(e) => setForm({ ...form, role: e.target.value as "HCA" | "LPN", eligibleShiftIds: [] })}
+              >
+                <option value="HCA">HCA</option>
+                <option value="LPN">LPN</option>
+              </select>
+            </div>
+          </>
+        )}
+        {step === 1 && (
+          <>
+            <div className="field">
+              <label>Eligible shifts</label>
+              {roleShifts.length === 0 && <span className="field-hint">No {form.role} shifts configured yet.</span>}
+              {roleShifts.map((s) => (
+                <label key={s.id} style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 400 }}>
+                  <input type="checkbox" checked={form.eligibleShiftIds.includes(s.id)} onChange={() => toggleShift(s.id)} />
+                  {s.name} ({s.shortCode})
+                </label>
+              ))}
+            </div>
+            <div className="field">
+              <label htmlFor="task-time">Due time (HHmm)</label>
+              <input id="task-time" required value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
+            </div>
+          </>
+        )}
+        {step === 2 && (
+          <>
+            <div className="field">
+              <label htmlFor="task-active-from">Active from</label>
+              <input
+                id="task-active-from"
+                type="date"
+                required
+                value={form.activeFrom}
+                onChange={(e) => setForm({ ...form, activeFrom: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="task-info">Important information (optional)</label>
+              <textarea
+                id="task-info"
+                value={form.importantInformation}
+                onChange={(e) => setForm({ ...form, importantInformation: e.target.value })}
+              />
+            </div>
+          </>
+        )}
+        {step === 3 && (
+          <div>
+            <dl>
+              <dt style={{ fontWeight: 600 }}>Task</dt>
+              <dd>
+                {form.taskName} ({form.role}){" "}
+                <button type="button" className="btn" onClick={() => setStep(0)}>
+                  Edit
+                </button>
+              </dd>
+              <dt style={{ fontWeight: 600, marginTop: 8 }}>Schedule &amp; assignment</dt>
+              <dd>
+                Daily at {form.time}, shifts:{" "}
+                {form.eligibleShiftIds.map((id) => shifts.find((s) => s.id === id)?.shortCode).join(", ") || "(none)"}{" "}
+                <button type="button" className="btn" onClick={() => setStep(1)}>
+                  Edit
+                </button>
+              </dd>
+              <dt style={{ fontWeight: 600, marginTop: 8 }}>Instructions</dt>
+              <dd>
+                Active from {form.activeFrom}. {form.importantInformation || "(no important information)"}{" "}
+                <button type="button" className="btn" onClick={() => setStep(2)}>
+                  Edit
+                </button>
+              </dd>
+            </dl>
+            <h3 style={{ fontSize: 14 }}>Next occurrences</h3>
+            {nextOccurrences.length === 0 && <p className="field-hint">No upcoming occurrences with the current schedule.</p>}
+            <ul>
+              {nextOccurrences.map((o) => (
+                <li key={o.date}>
+                  {o.date} — {o.labels.join(", ")}
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className="field">
-            <label htmlFor="task-role">Role</label>
-            <select
-              id="task-role"
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value as "HCA" | "LPN", eligibleShiftIds: [] })}
-            >
-              <option value="HCA">HCA</option>
-              <option value="LPN">LPN</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Eligible shifts</label>
-            {roleShifts.length === 0 && <span className="field-hint">No {form.role} shifts configured yet.</span>}
-            {roleShifts.map((s) => (
-              <label key={s.id} style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 400 }}>
-                <input type="checkbox" checked={form.eligibleShiftIds.includes(s.id)} onChange={() => toggleShift(s.id)} />
-                {s.name} ({s.shortCode})
-              </label>
-            ))}
-          </div>
-          <div className="field">
-            <label htmlFor="task-time">Due time (HHmm)</label>
-            <input id="task-time" required value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
-          </div>
-          <div className="field">
-            <label htmlFor="task-info">Important information (optional)</label>
-            <textarea
-              id="task-info"
-              value={form.importantInformation}
-              onChange={(e) => setForm({ ...form, importantInformation: e.target.value })}
-            />
-          </div>
-          {error && (
-            <p className="field-error" role="alert">
-              {error}
-            </p>
-          )}
-          <button className="btn btn--primary" type="submit" disabled={saving || form.eligibleShiftIds.length === 0}>
-            {saving ? "Saving…" : "Add task"}
-          </button>
-        </form>
-      </Dialog>
+        )}
+      </StepDialog>
       {guard.confirmOpen && <ConfirmDiscardDialog onKeepEditing={guard.keepEditing} onDiscard={guard.discard} />}
+      {saveError && <SaveErrorDialog message={saveError} onClose={() => setSaveError(null)} />}
     </>
   );
 }
@@ -330,21 +473,47 @@ export function ResidentsPage(): React.JSX.Element {
   const [addResidentOpen, setAddResidentOpen] = useState(false);
   const [taskDialogResident, setTaskDialogResident] = useState<Resident | null>(null);
   const [taskCounts, setTaskCounts] = useState<Record<string, number>>({});
+  const [error, setError] = useState<string | null>(null);
+  const { session, refresh } = useAuth();
+  const capabilities = effectiveCapabilities(session.role, session.grants);
+  const canCreateResident = capabilities.has("resident.create");
+  const canCreateRoom = capabilities.has("room.create");
+  const canCreateBed = capabilities.has("bed.create");
+  const canCreateTask = capabilities.has("residentTask.create");
 
   function reloadAll() {
-    window.tasksheet.residents.list().then(setResidents);
-    window.tasksheet.placements.list().then(setPlacements);
-    window.tasksheet.rooms.list().then(setRooms);
-    window.tasksheet.beds.list().then(setBeds);
-    window.tasksheet.shifts.list().then(setShifts);
+    window.tasksheet.residents.list().then((r) => {
+      const value = unwrapQuery(r, refresh, setError);
+      if (value) setResidents(value);
+    });
+    window.tasksheet.placements.list().then((r) => {
+      const value = unwrapQuery(r, refresh, setError);
+      if (value) setPlacements(value);
+    });
+    window.tasksheet.rooms.list().then((r) => {
+      const value = unwrapQuery(r, refresh, setError);
+      if (value) setRooms(value);
+    });
+    window.tasksheet.beds.list().then((r) => {
+      const value = unwrapQuery(r, refresh, setError);
+      if (value) setBeds(value);
+    });
+    window.tasksheet.shifts.list().then((r) => {
+      const value = unwrapQuery(r, refresh, setError);
+      if (value) setShifts(value);
+    });
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(reloadAll, []);
 
   useEffect(() => {
     if (!residents) return;
     Promise.all(
-      residents.map(async (r) => [r.id, (await window.tasksheet.residentTasks.listForResident(r.id)).length] as const)
+      residents.map(async (r) => {
+        const result = await window.tasksheet.residentTasks.listForResident(r.id);
+        return [r.id, result.kind === "success" ? result.value.length : 0] as const;
+      })
     ).then((entries) => setTaskCounts(Object.fromEntries(entries)));
   }, [residents]);
 
@@ -369,15 +538,22 @@ export function ResidentsPage(): React.JSX.Element {
 
   return (
     <>
-      <RoomsAndBedsPanel rooms={rooms} beds={beds} onChanged={reloadAll} />
+      <RoomsAndBedsPanel rooms={rooms} beds={beds} onChanged={reloadAll} canCreateRoom={canCreateRoom} canCreateBed={canCreateBed} />
 
       <div className="panel">
         <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 12 }}>
           <h2 style={{ margin: 0 }}>Residents</h2>
-          <button className="btn btn--primary" onClick={() => setAddResidentOpen(true)} disabled={beds.length === 0}>
-            Add resident
-          </button>
+          {canCreateResident && (
+            <button className="btn btn--primary" onClick={() => setAddResidentOpen(true)} disabled={beds.length === 0}>
+              Add resident
+            </button>
+          )}
         </div>
+        {error && (
+          <p className="field-error" role="alert">
+            {error}
+          </p>
+        )}
 
         <div className="field" style={{ maxWidth: 320 }}>
           <label htmlFor="resident-search">Search residents</label>
@@ -419,9 +595,11 @@ export function ResidentsPage(): React.JSX.Element {
                   <td>{r.status}</td>
                   <td>{taskCounts[r.id] ?? "…"}</td>
                   <td>
-                    <button className="btn" onClick={() => setTaskDialogResident(r)}>
-                      Add task
-                    </button>
+                    {canCreateTask && (
+                      <button className="btn" onClick={() => setTaskDialogResident(r)}>
+                        Add task
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

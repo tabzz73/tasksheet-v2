@@ -2,8 +2,12 @@ import React, { useEffect, useState } from "react";
 import type { Shift } from "../../domain/entities.js";
 import type { AssignmentDocumentModel } from "../../domain/generation.js";
 import { AssignmentSheet } from "../print/AssignmentSheet.js";
+import { describeUseCaseError } from "../errorMessage.js";
+import { unwrapQuery } from "../ipcHelpers.js";
+import { useAuth } from "../auth/AuthContext.js";
 
 export function PrintCenterPage(): React.JSX.Element {
+  const { refresh } = useAuth();
   const [shifts, setShifts] = useState<readonly Shift[]>([]);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [shiftId, setShiftId] = useState("");
@@ -12,7 +16,9 @@ export function PrintCenterPage(): React.JSX.Element {
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    window.tasksheet.shifts.list().then((list) => {
+    window.tasksheet.shifts.list().then((result) => {
+      const list = unwrapQuery(result, refresh, setError);
+      if (!list) return;
       setShifts(list);
       if (list.length > 0 && !shiftId) setShiftId(list[0]!.id);
     });
@@ -31,8 +37,10 @@ export function PrintCenterPage(): React.JSX.Element {
     setGenerating(false);
     if (result.kind === "success") {
       setDocument(result.value);
+    } else if (result.kind === "unauthenticated") {
+      refresh();
     } else {
-      setError(result.message);
+      setError(describeUseCaseError(result));
     }
   }
 

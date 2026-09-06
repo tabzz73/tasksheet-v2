@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from "react";
 import type { FacilitySettings } from "../../domain/entities.js";
+import { describeUseCaseError } from "../errorMessage.js";
+import { unwrapQuery } from "../ipcHelpers.js";
+import { useAuth } from "../auth/AuthContext.js";
+import { UsersAndAccessPanel } from "./UsersAndAccessPanel.js";
 
 const COMMON_TIME_ZONES = [
   "America/New_York",
@@ -40,7 +44,8 @@ function toForm(settings: FacilitySettings): FormState {
   };
 }
 
-export function SettingsPage(): React.JSX.Element {
+function FacilityAndLocaleCategory(): React.JSX.Element {
+  const { refresh } = useAuth();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saved, setSaved] = useState<FormState>(EMPTY_FORM);
   const [status, setStatus] = useState<"idle" | "loading" | "saving">("loading");
@@ -48,13 +53,15 @@ export function SettingsPage(): React.JSX.Element {
   const [savedMessage, setSavedMessage] = useState(false);
 
   useEffect(() => {
-    window.tasksheet.facility.get().then((existing) => {
+    window.tasksheet.facility.get().then((result) => {
+      const existing = unwrapQuery(result, refresh, setError);
       if (existing) {
         setForm(toForm(existing));
         setSaved(toForm(existing));
       }
       setStatus("idle");
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(saved);
@@ -74,8 +81,10 @@ export function SettingsPage(): React.JSX.Element {
     if (result.kind === "success") {
       setSaved(form);
       setSavedMessage(true);
+    } else if (result.kind === "unauthenticated") {
+      refresh();
     } else {
-      setError(result.message);
+      setError(describeUseCaseError(result));
     }
   }
 
@@ -172,6 +181,45 @@ export function SettingsPage(): React.JSX.Element {
           {status === "saving" ? "Saving…" : "Save facility settings"}
         </button>
       </form>
+    </div>
+  );
+}
+
+const CATEGORIES = [
+  { id: "facility", label: "Facility & Locale" },
+  { id: "access", label: "Users & Access" }
+] as const;
+type CategoryId = (typeof CATEGORIES)[number]["id"];
+
+export function SettingsPage(): React.JSX.Element {
+  const { session } = useAuth();
+  const isAdmin = session.role === "Administrator";
+  const [category, setCategory] = useState<CategoryId>("facility");
+
+  const visibleCategories = CATEGORIES.filter((c) => c.id !== "access" || isAdmin);
+
+  return (
+    <div style={{ display: "flex", gap: 16 }}>
+      <nav aria-label="Settings categories" style={{ minWidth: 180 }}>
+        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+          {visibleCategories.map((c) => (
+            <li key={c.id}>
+              <button
+                className="app-nav__link"
+                aria-current={category === c.id ? "page" : undefined}
+                onClick={() => setCategory(c.id)}
+                style={{ background: category === c.id ? "var(--color-panel)" : "transparent" }}
+              >
+                {c.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+      <div style={{ flex: 1 }}>
+        {category === "facility" && <FacilityAndLocaleCategory />}
+        {category === "access" && isAdmin && <UsersAndAccessPanel />}
+      </div>
     </div>
   );
 }

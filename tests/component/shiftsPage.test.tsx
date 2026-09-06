@@ -2,12 +2,13 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ShiftsPage } from "../../src/renderer/pages/ShiftsPage.js";
+import { AuthProvider } from "../../src/renderer/auth/AuthContext.js";
 
 function mockApi() {
   const shifts: unknown[] = [];
   (window as unknown as { tasksheet: unknown }).tasksheet = {
     shifts: {
-      list: vi.fn(async () => shifts),
+      list: vi.fn(async () => ({ kind: "success", value: shifts })),
       create: vi.fn(async (input: { shortCode: string }) => {
         const shift = { id: "s1", ...input, startMinutes: 420, endMinutes: 900, active: true, displayOrder: 0 };
         shifts.push(shift);
@@ -17,13 +18,21 @@ function mockApi() {
   };
 }
 
+function renderAsAdmin() {
+  return render(
+    <AuthProvider value={{ session: { alias: "admin", role: "Administrator", grants: [], mustChangePassword: false }, refresh: vi.fn(), logout: vi.fn(), lock: vi.fn() }}>
+      <ShiftsPage />
+    </AuthProvider>
+  );
+}
+
 describe("ShiftsPage — Add shift dialog dirty-exit guard (AC-28)", () => {
   beforeEach(() => {
     mockApi();
   });
 
   it("shows an empty state, then lists a created shift", async () => {
-    render(<ShiftsPage />);
+    renderAsAdmin();
     expect(await screen.findByText(/No shifts configured yet/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Add shift" }));
@@ -37,7 +46,7 @@ describe("ShiftsPage — Add shift dialog dirty-exit guard (AC-28)", () => {
   });
 
   it("a pristine dialog closes immediately on Escape with no confirmation", async () => {
-    render(<ShiftsPage />);
+    renderAsAdmin();
     await userEvent.click(screen.getByRole("button", { name: "Add shift" }));
     expect(screen.getByRole("dialog", { name: "Add shift" })).toBeInTheDocument();
 
@@ -46,7 +55,7 @@ describe("ShiftsPage — Add shift dialog dirty-exit guard (AC-28)", () => {
   });
 
   it("a dirty dialog raises the centered discard confirmation on Escape, and Keep editing preserves the draft", async () => {
-    const { container } = render(<ShiftsPage />);
+    const { container } = renderAsAdmin();
     await userEvent.click(screen.getByRole("button", { name: "Add shift" }));
     await userEvent.type(screen.getByLabelText("Short code"), "D1");
 
@@ -63,7 +72,7 @@ describe("ShiftsPage — Add shift dialog dirty-exit guard (AC-28)", () => {
   });
 
   it("Discard changes abandons the dirty draft and closes both dialogs", async () => {
-    render(<ShiftsPage />);
+    renderAsAdmin();
     await userEvent.click(screen.getByRole("button", { name: "Add shift" }));
     await userEvent.type(screen.getByLabelText("Short code"), "D1");
 

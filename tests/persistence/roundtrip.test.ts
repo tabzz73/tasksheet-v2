@@ -82,10 +82,11 @@ describe("AC-04: restart persistence", () => {
   });
 
   it("migrations are idempotent — reopening an already-migrated file is a safe no-op", () => {
-    expect(getSchemaVersion(db)).toBe(1);
+    const versionAfterFirstOpen = getSchemaVersion(db);
+    expect(versionAfterFirstOpen).toBeGreaterThan(0);
     db.close();
     const reopened = openDatabase(dbPath);
-    expect(getSchemaVersion(reopened)).toBe(1);
+    expect(getSchemaVersion(reopened)).toBe(versionAfterFirstOpen);
     reopened.close();
   });
 });

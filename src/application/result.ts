@@ -1,13 +1,17 @@
 /**
- * Common use-case result shape (DATA-CONTRACTS.md §6): every mutation
- * returns a typed validation/conflict/storage/success result rather than
- * throwing across the IPC boundary.
+ * Common use-case result shape (DATA-CONTRACTS.md §6, extended by
+ * ACCESS-CONTROL.md §4): every mutation/query returns a typed
+ * unauthenticated/forbidden/validation/conflict/storage/success result
+ * rather than throwing across the IPC boundary. `unauthenticated` and
+ * `forbidden` never leak whether the underlying record exists.
  */
 export type UseCaseResult<T> =
   | { kind: "success"; value: T }
   | { kind: "validation"; message: string; fieldErrors?: Record<string, string> }
   | { kind: "conflict"; message: string }
-  | { kind: "storage"; message: string };
+  | { kind: "storage"; message: string }
+  | { kind: "unauthenticated" }
+  | { kind: "forbidden"; reason: string };
 
 export function success<T>(value: T): UseCaseResult<T> {
   return { kind: "success", value };

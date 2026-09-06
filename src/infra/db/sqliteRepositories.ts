@@ -25,6 +25,12 @@ import type {
   UnitOfWork
 } from "../../application/ports.js";
 import { bumpDatasetRevision, currentDatasetRevision } from "./migrations.js";
+import {
+  SqliteAccountRepository,
+  SqliteLoginLockoutRepository,
+  SqliteRecoveryCodeRepository,
+  SqliteSecurityEventRepository
+} from "./accountRepositories.js";
 
 function toBool(value: number): boolean {
   return value === 1;
@@ -255,6 +261,10 @@ class SqliteShiftRepository implements ShiftRepository {
       .get(shortCode, excludeId ?? "") as { id: string } | undefined;
     return row !== undefined;
   }
+
+  deactivate(id: Id): void {
+    this.db.prepare("UPDATE shifts SET active = 0 WHERE id = ?").run(id);
+  }
 }
 
 class SqliteCatalogItemRepository implements CatalogItemRepository {
@@ -406,6 +416,10 @@ export function createSqliteRepositories(db: Database.Database): Repositories {
     catalogItems: new SqliteCatalogItemRepository(db),
     residentTasks: new SqliteResidentTaskRepository(db),
     generationEvents: new SqliteGenerationEventRepository(db),
+    accounts: new SqliteAccountRepository(db),
+    loginLockouts: new SqliteLoginLockoutRepository(db),
+    securityEvents: new SqliteSecurityEventRepository(db),
+    recoveryCode: new SqliteRecoveryCodeRepository(db),
     unitOfWork: new SqliteUnitOfWork(db)
   };
 }

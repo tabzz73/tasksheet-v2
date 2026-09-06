@@ -326,11 +326,27 @@ table.data-table td {
   font-size: 10pt;
 }
 
+/* Repeat headers on every printed page and avoid splitting a row mid-page
+   (PRD.md §19.1: "Repeating table headers on multi-page output"). thead's
+   default UA display is already table-header-group; this is explicit so a
+   future style reset cannot silently drop it. */
+.print-sheet thead {
+  display: table-header-group;
+}
+
+.print-sheet tr {
+  page-break-inside: avoid;
+}
+
 .print-sheet th,
 .print-sheet td {
   border: 1px solid #444;
   padding: 4px 6px;
   vertical-align: top;
+  /* Never truncate clinically relevant text (UI-UX-SPEC.md §4): wrap long
+     content instead of clipping it with an ellipsis or fixed height. */
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .print-sheet th {

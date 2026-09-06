@@ -3,6 +3,10 @@ dist/
 dist-electron/
 release/
 electron/.smoke-bundle.cjs
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
 *.sqlite3
 *.sqlite3-journal
 *.sqlite3-wal

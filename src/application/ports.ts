@@ -13,6 +13,7 @@ import type {
   Shift
 } from "../domain/entities.js";
 import type { Id } from "../domain/types.js";
+import type { AccessRole, Capability, LocalAccount, LoginLockoutState, SecurityEvent, SecurityEventKind } from "../domain/accounts.js";
 
 export interface FacilityRepository {
   get(): FacilitySettings | null;
@@ -50,6 +51,7 @@ export interface ShiftRepository {
   findById(id: Id): Shift | null;
   create(shift: Shift): void;
   isShortCodeTaken(shortCode: string, excludeId?: Id): boolean;
+  deactivate(id: Id): void;
 }
 
 export interface CatalogItemRepository {
@@ -74,6 +76,35 @@ export interface GenerationEventRepository {
   }): void;
 }
 
+export interface AccountRepository {
+  countEnabledAdministrators(): number;
+  countAll(): number;
+  findById(id: Id): LocalAccount | null;
+  findByAlias(alias: string): LocalAccount | null;
+  listAll(): readonly LocalAccount[];
+  create(account: LocalAccount & { passwordVerifier: string }): void;
+  updatePasswordVerifier(id: Id, passwordVerifier: string, newAuthRevision: number, mustChangePassword: boolean): void;
+  getPasswordVerifier(id: Id): string | null;
+  updateRoleAndGrants(id: Id, role: AccessRole, grants: readonly Capability[], newAuthRevision: number): void;
+  setEnabled(id: Id, enabled: boolean, newAuthRevision: number): void;
+}
+
+export interface LoginLockoutRepository {
+  get(accountId: Id): LoginLockoutState | null;
+  recordFailure(accountId: Id, nowIso: string, windowMs: number): LoginLockoutState;
+  clear(accountId: Id): void;
+}
+
+export interface SecurityEventRepository {
+  record(event: { kind: SecurityEventKind; actorAccountId: Id | null; targetAccountId: Id | null; reason: string | null; occurredAt: string }): void;
+  listRecent(limit: number): readonly SecurityEvent[];
+}
+
+export interface RecoveryCodeRepository {
+  setVerifier(verifier: string | null): void;
+  getVerifier(): string | null;
+}
+
 export interface UnitOfWork {
   currentDatasetRevision(): number;
   /** Runs `fn` in a single transaction and returns the new dataset revision. */
@@ -90,5 +121,9 @@ export interface Repositories {
   catalogItems: CatalogItemRepository;
   residentTasks: ResidentTaskRepository;
   generationEvents: GenerationEventRepository;
+  accounts: AccountRepository;
+  loginLockouts: LoginLockoutRepository;
+  securityEvents: SecurityEventRepository;
+  recoveryCode: RecoveryCodeRepository;
   unitOfWork: UnitOfWork;
 }
